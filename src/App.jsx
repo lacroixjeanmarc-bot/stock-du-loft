@@ -1,13 +1,20 @@
-import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
+import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import InventoryList from './pages/InventoryList';
 import AddItem from './pages/AddItem';
 import QuickSale from './pages/QuickSale';
 import AboutPage from './pages/AboutPage';
+import Vitrine from './pages/Vitrine';
 import LoginPage from './pages/LoginPage';
 
 function AppContent() {
   const { user, logout } = useAuth();
+  const location = useLocation();
+
+  // Vitrine publique — pas besoin de login
+  if (location.pathname === '/vitrine') {
+    return <Vitrine />;
+  }
 
   if (!user) {
     return <LoginPage />;
