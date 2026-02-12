@@ -5,7 +5,7 @@ import { useAuth } from '../hooks/useAuth';
 export default function QuickSale() {
   const { user } = useAuth();
 
-  const [searchId, setSearchId] = useState('');
+  const [searchId, setSearchId] = useState('ADL-');
   const [foundItem, setFoundItem] = useState(null);
   const [sellerName, setSellerName] = useState(user?.displayName?.split(' ')[0] || '');
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
@@ -59,7 +59,7 @@ export default function QuickSale() {
       await sellItem(foundItem.id, sellerName, saleDate, finalPrice, marketName);
       setSuccess(`✓ ${foundItem.uniqueId} vendu pour ${finalPrice.toFixed(2)} $${marketName ? ` au ${marketName}` : ''}`);
       setFoundItem(null);
-      setSearchId('');
+      setSearchId('ADL-');
       setSalePrice('');
     } catch (err) {
       console.error(err);
@@ -70,7 +70,7 @@ export default function QuickSale() {
   };
 
   const resetSearch = () => {
-    setSearchId('');
+    setSearchId('ADL-');
     setFoundItem(null);
     setSalePrice('');
     setError('');
@@ -88,7 +88,7 @@ export default function QuickSale() {
             type="text"
             value={searchId}
             onChange={(e) => setSearchId(e.target.value.toUpperCase())}
-            placeholder="Numéro de l'item (ex: SDL-001)"
+            placeholder="Ex: ADL-001"
             className="form-input sale-search-input"
             autoComplete="off"
             autoFocus

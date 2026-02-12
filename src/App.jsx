@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './hooks/useAuth';
 import InventoryList from './pages/InventoryList';
 import AddItem from './pages/AddItem';
 import QuickSale from './pages/QuickSale';
+import AboutPage from './pages/AboutPage';
 import LoginPage from './pages/LoginPage';
 
 function AppContent() {
@@ -36,6 +37,7 @@ function AppContent() {
           <Route path="/" element={<InventoryList />} />
           <Route path="/add" element={<AddItem />} />
           <Route path="/sale" element={<QuickSale />} />
+          <Route path="/about" element={<AboutPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
@@ -53,6 +55,10 @@ function AppContent() {
         <NavLink to="/add" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
           <span className="nav-icon">➕</span>
           <span className="nav-label">Ajouter</span>
+        </NavLink>
+        <NavLink to="/about" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+          <span className="nav-icon">ℹ️</span>
+          <span className="nav-label">Info</span>
         </NavLink>
       </nav>
     </div>
