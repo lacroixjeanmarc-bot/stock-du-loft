@@ -15,6 +15,8 @@ export default function QuickSale() {
   const [selling, setSelling] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [isGift, setIsGift] = useState(false);
+  const [giftNote, setGiftNote] = useState('');
 
   const handleSearch = async (e) => {
     e?.preventDefault();
@@ -55,12 +57,17 @@ export default function QuickSale() {
     setError('');
 
     try {
-      const finalPrice = parseFloat(salePrice) || foundItem.price;
-      await sellItem(foundItem.id, sellerName, saleDate, finalPrice, marketName);
-      setSuccess(`✓ ${foundItem.uniqueId} vendu pour ${finalPrice.toFixed(2)} $${marketName ? ` au ${marketName}` : ''}`);
+      const finalPrice = isGift ? 0 : (parseFloat(salePrice) || foundItem.price);
+      await sellItem(foundItem.id, sellerName, saleDate, finalPrice, marketName, isGift, giftNote);
+      const msg = isGift
+        ? `✓ ${foundItem.uniqueId} donné en cadeau${giftNote ? ` — ${giftNote}` : ''}`
+        : `✓ ${foundItem.uniqueId} vendu pour ${finalPrice.toFixed(2)} $${marketName ? ` au ${marketName}` : ''}`;
+      setSuccess(msg);
       setFoundItem(null);
       setSearchId('ADL-');
       setSalePrice('');
+      setIsGift(false);
+      setGiftNote('');
     } catch (err) {
       console.error(err);
       setError('Erreur lors de la vente. Réessayez.');
@@ -75,6 +82,8 @@ export default function QuickSale() {
     setSalePrice('');
     setError('');
     setSuccess('');
+    setIsGift(false);
+    setGiftNote('');
   };
 
   return (
@@ -145,25 +154,58 @@ export default function QuickSale() {
 
           {/* Informations de vente */}
           <div className="sale-form">
+            {/* Option cadeau */}
             <div className="form-group">
-              <label className="form-label">Prix de vente ($)</label>
-              <div className="sale-price-row">
+              <label className="gift-toggle">
                 <input
-                  type="number"
-                  value={salePrice}
-                  onChange={(e) => setSalePrice(e.target.value)}
-                  className="form-input"
-                  step="0.01"
-                  min="0"
-                  inputMode="decimal"
+                  type="checkbox"
+                  checked={isGift}
+                  onChange={(e) => {
+                    setIsGift(e.target.checked);
+                    if (e.target.checked) setSalePrice('0');
+                    else setSalePrice(foundItem.price?.toFixed(2) || '');
+                  }}
                 />
-                {parseFloat(salePrice) < foundItem.price && (
-                  <span className="sale-discount">
-                    Rabais de {(foundItem.price - parseFloat(salePrice)).toFixed(2)} $
-                  </span>
-                )}
-              </div>
+                <span>🎁 Donné en cadeau</span>
+              </label>
             </div>
+
+            {/* Note cadeau */}
+            {isGift && (
+              <div className="form-group">
+                <label className="form-label">Note</label>
+                <input
+                  type="text"
+                  value={giftNote}
+                  onChange={(e) => setGiftNote(e.target.value)}
+                  className="form-input"
+                  placeholder="Ex: Cadeau pour maman, échange, etc."
+                />
+              </div>
+            )}
+
+            {/* Prix de vente (caché si cadeau) */}
+            {!isGift && (
+              <div className="form-group">
+                <label className="form-label">Prix de vente ($)</label>
+                <div className="sale-price-row">
+                  <input
+                    type="number"
+                    value={salePrice}
+                    onChange={(e) => setSalePrice(e.target.value)}
+                    className="form-input"
+                    step="0.01"
+                    min="0"
+                    inputMode="decimal"
+                  />
+                  {parseFloat(salePrice) < foundItem.price && (
+                    <span className="sale-discount">
+                      Rabais de {(foundItem.price - parseFloat(salePrice)).toFixed(2)} $
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="form-group">
               <label className="form-label">Vendeuse</label>
@@ -206,7 +248,12 @@ export default function QuickSale() {
                 onClick={handleSell}
                 disabled={selling || !sellerName.trim()}
               >
-                {selling ? 'En cours...' : `Confirmer la vente — ${parseFloat(salePrice || 0).toFixed(2)} $`}
+                {selling
+                  ? 'En cours...'
+                  : isGift
+                    ? '🎁 Confirmer le cadeau'
+                    : `Confirmer la vente — ${parseFloat(salePrice || 0).toFixed(2)} $`
+                }
               </button>
               <button className="btn btn-secondary btn-full" onClick={resetSearch}>
                 Annuler

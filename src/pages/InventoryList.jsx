@@ -209,9 +209,11 @@ export default function InventoryList() {
                     )}
                     {item.status === 'sold' && (
                       <span className="item-sold-info">
-                        {item.salePrice && item.salePrice !== item.price
-                          ? <><s>{item.price?.toFixed(2)} $</s> → {item.salePrice?.toFixed(2)} $ · </>
-                          : ''
+                        {item.isGift
+                          ? <>🎁 Cadeau{item.giftNote ? ` — ${item.giftNote}` : ''} · </>
+                          : item.salePrice && item.salePrice !== item.price
+                            ? <><s>{item.price?.toFixed(2)} $</s> → {item.salePrice?.toFixed(2)} $ · </>
+                            : ''
                         }
                         {item.saleDate} — {item.sellerName}
                         {item.marketName ? ` · 📍 ${item.marketName}` : ''}

@@ -156,16 +156,20 @@ export async function getNextUniqueId(prefix = 'ADL') {
 /**
  * Marque un item comme vendu.
  */
-export async function sellItem(itemId, sellerName, saleDate = null, salePrice = null, marketName = '') {
+export async function sellItem(itemId, sellerName, saleDate = null, salePrice = null, marketName = '', isGift = false, giftNote = '') {
   const itemRef = ref(database, `${ITEMS_PATH}/${itemId}`);
   const updates = {
     status: 'sold',
     sellerName: sellerName.trim(),
     saleDate: saleDate || new Date().toISOString().split('T')[0],
     marketName: marketName.trim(),
+    isGift: isGift,
+    giftNote: isGift ? giftNote.trim() : '',
     updatedAt: Date.now()
   };
-  if (salePrice !== null) {
+  if (isGift) {
+    updates.salePrice = 0;
+  } else if (salePrice !== null) {
     updates.salePrice = parseFloat(salePrice);
   }
   await update(itemRef, updates);
@@ -197,6 +201,8 @@ export async function returnToInventory(itemId) {
     salePrice: null,
     marketName: '',
     sellerName: '',
+    isGift: false,
+    giftNote: '',
     updatedAt: Date.now()
   });
 }

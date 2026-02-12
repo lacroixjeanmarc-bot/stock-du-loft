@@ -590,6 +590,24 @@ body {
   color: #3498db !important;
 }
 
+.gift-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(155, 89, 182, 0.1);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.gift-toggle input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  accent-color: #9b59b6;
+}
+
 /* ---- Add Item Page ---- */
 .photo-section {
   margin-bottom: 20px;
