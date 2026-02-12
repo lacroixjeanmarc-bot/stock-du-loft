@@ -88,7 +88,8 @@ export default function Vitrine() {
         <img src="/pwa-192x192.png" alt="Logo" className="vitrine-logo" />
         <div>
           <h1 className="vitrine-title">✂️ L'Atelier du Loft</h1>
-          <p className="vitrine-subtitle">Catalogue en ligne · {filteredItems.length} article{filteredItems.length > 1 ? 's' : ''} disponible{filteredItems.length > 1 ? 's' : ''}</p>
+          <p className="vitrine-subtitle-name">Josée Bourgouin</p>
+          <p className="vitrine-subtitle">{filteredItems.length} article{filteredItems.length > 1 ? 's' : ''} disponible{filteredItems.length > 1 ? 's' : ''}</p>
         </div>
       </header>
 
@@ -172,8 +173,9 @@ export default function Vitrine() {
 
       {/* Footer */}
       <footer className="vitrine-footer">
-        <p>✂️ L'Atelier du Loft — Jean-Marc Lacroix</p>
-        <p><a href="mailto:lacroix.jeanmarc@gmail.com">📧 lacroix.jeanmarc@gmail.com</a></p>
+        <p>✂️ L'Atelier du Loft — Josée Bourgouin</p>
+        <p className="vitrine-footer-cta">Écrivez-moi si quelque chose vous intéresse!</p>
+        <a href="mailto:Josée.Bourgouin@gmail.com">📧 Josée.Bourgouin@gmail.com</a>
       </footer>
     </div>
   );
