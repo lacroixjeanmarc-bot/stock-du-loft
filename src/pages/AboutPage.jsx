@@ -4,6 +4,9 @@ export default function AboutPage() {
       <h2 className="page-title">ℹ️ À propos</h2>
 
       <div className="about-card">
+        <div className="about-logo">
+          <img src="/pwa-192x192.png" alt="Stock du Loft" />
+        </div>
         <h3>✂️ Stock du Loft</h3>
         <p className="about-version">Version 1.0</p>
 

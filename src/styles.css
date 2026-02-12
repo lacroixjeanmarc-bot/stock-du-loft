@@ -871,6 +871,18 @@ body {
 .about-card h3 {
   font-size: 1.4rem;
   margin-bottom: 4px;
+  text-align: center;
+}
+
+.about-logo {
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.about-logo img {
+  width: 120px;
+  height: 120px;
+  border-radius: 20px;
 }
 
 .about-version {
