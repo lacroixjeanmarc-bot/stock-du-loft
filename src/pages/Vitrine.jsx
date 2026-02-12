@@ -4,14 +4,37 @@ import { database } from '../firebase';
 
 const ITEMS_PATH = 'stockduloft/items';
 const PHOTOS_PATH = 'stockduloft/photos';
+const SETTINGS_PATH = 'stockduloft/settings';
+
+function isRecentlySold(item, days) {
+  if (item.status !== 'sold' || !item.saleDate) return false;
+  const saleDate = new Date(item.saleDate);
+  const now = new Date();
+  const diff = (now - saleDate) / (1000 * 60 * 60 * 24);
+  return diff <= days;
+}
 
 export default function Vitrine() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [selectedItem, setSelectedItem] = useState(null);
-  const [fullPhoto, setFullPhoto] = useState(null);
-  const [loadingPhoto, setLoadingPhoto] = useState(false);
+  const [photos, setPhotos] = useState({});
+  const [soldDays, setSoldDays] = useState(7);
+
+  // Charger le paramètre de durée d'affichage des ventes
+  useEffect(() => {
+    const settingsRef = ref(database, SETTINGS_PATH);
+    const unsub = onValue(settingsRef, (snap) => {
+      if (snap.exists()) {
+        const val = snap.val();
+        if (val.vitrineSoldDays !== undefined) {
+          setSoldDays(val.vitrineSoldDays);
+        }
+      }
+    });
+    return unsub;
+  }, []);
 
   useEffect(() => {
     const itemsRef = ref(database, ITEMS_PATH);
@@ -20,8 +43,8 @@ export default function Vitrine() {
       if (snapshot.exists()) {
         snapshot.forEach((child) => {
           const item = { id: child.key, ...child.val() };
-          // Afficher seulement les items en stock ou en consigne
-          if (item.status === 'inventory' || item.status === 'consignment') {
+          // Afficher: en stock, en consigne, ou vendu récemment
+          if (item.status === 'inventory' || item.status === 'consignment' || isRecentlySold(item, soldDays)) {
             data.push(item);
           }
         });
@@ -29,9 +52,24 @@ export default function Vitrine() {
       data.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setItems(data);
       setLoading(false);
+
+      // Charger les photos de tous les items visibles
+      data.forEach(async (item) => {
+        if (item.hasPhoto && !item.photoBase64) {
+          try {
+            const photoRef = ref(database, `${PHOTOS_PATH}/${item.id}`);
+            const snap = await get(photoRef);
+            if (snap.exists()) {
+              setPhotos((prev) => ({ ...prev, [item.id]: snap.val().photoBase64 }));
+            }
+          } catch (err) {
+            console.error('Erreur photo:', err);
+          }
+        }
+      });
     });
     return unsubscribe;
-  }, []);
+  }, [soldDays]);
 
   // Catégories uniques
   const categories = [...new Set(items.map((i) => i.category).filter(Boolean))].sort();
@@ -43,31 +81,9 @@ export default function Vitrine() {
   const handleItemClick = async (item) => {
     if (selectedItem === item.id) {
       setSelectedItem(null);
-      setFullPhoto(null);
       return;
     }
     setSelectedItem(item.id);
-    setFullPhoto(null);
-
-    // Charger la photo complète
-    if (item.hasPhoto || item.photoBase64) {
-      setLoadingPhoto(true);
-      try {
-        if (item.photoBase64) {
-          setFullPhoto(item.photoBase64);
-        } else {
-          const photoRef = ref(database, `${PHOTOS_PATH}/${item.id}`);
-          const snapshot = await get(photoRef);
-          if (snapshot.exists()) {
-            setFullPhoto(snapshot.val().photoBase64);
-          }
-        }
-      } catch (err) {
-        console.error('Erreur photo:', err);
-      } finally {
-        setLoadingPhoto(false);
-      }
-    }
   };
 
   if (loading) {
@@ -128,12 +144,21 @@ export default function Vitrine() {
               className={`vitrine-card ${selectedItem === item.id ? 'expanded' : ''}`}
               onClick={() => handleItemClick(item)}
             >
-              {/* Miniature ou placeholder */}
+              {/* Photo ou placeholder */}
               <div className="vitrine-card-photo">
-                {item.thumbnail ? (
-                  <img src={item.thumbnail} alt={item.description} />
+                {photos[item.id] ? (
+                  <img src={photos[item.id]} alt={item.description} />
+                ) : item.photoBase64 ? (
+                  <img src={item.photoBase64} alt={item.description} />
+                ) : item.thumbnail ? (
+                  <img src={item.thumbnail} alt={item.description} className="vitrine-thumb-blur" />
                 ) : (
                   <div className="vitrine-card-no-photo">📷</div>
+                )}
+                {item.status === 'sold' && (
+                  <div className="vitrine-sold-overlay">
+                    <span>VENDU</span>
+                  </div>
                 )}
               </div>
 
@@ -149,13 +174,8 @@ export default function Vitrine() {
               {/* Expanded: photo complète */}
               {selectedItem === item.id && (
                 <div className="vitrine-card-expanded" onClick={(e) => e.stopPropagation()}>
-                  {loadingPhoto && (
-                    <div className="vitrine-photo-loading">
-                      <div className="loading-spinner" />
-                    </div>
-                  )}
-                  {fullPhoto && (
-                    <img src={fullPhoto} alt={item.description} className="vitrine-full-photo" />
+                  {(photos[item.id] || item.photoBase64) && (
+                    <img src={photos[item.id] || item.photoBase64} alt={item.description} className="vitrine-full-photo" />
                   )}
                   <div className="vitrine-card-details">
                     <p><strong>#{item.uniqueId}</strong></p>
