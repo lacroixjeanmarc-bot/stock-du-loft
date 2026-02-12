@@ -21,7 +21,7 @@ export default function AddItem() {
 
   // Charger le prochain numéro disponible au chargement
   useEffect(() => {
-    getNextUniqueId('SDL').then((nextId) => {
+    getNextUniqueId('ADL').then((nextId) => {
       setFormData((prev) => ({ ...prev, uniqueId: nextId }));
       setSuggestedId(nextId);
     });
@@ -75,7 +75,7 @@ export default function AddItem() {
     // Vérifier si le numéro existe déjà
     const existing = await getItemByUniqueId(formData.uniqueId);
     if (existing) {
-      const nextId = await getNextUniqueId('SDL');
+      const nextId = await getNextUniqueId('ADL');
       setSuggestedId(nextId);
       setError(`Le numéro "${formData.uniqueId.toUpperCase()}" existe déjà !`);
       return;
@@ -139,7 +139,7 @@ export default function AddItem() {
             name="uniqueId"
             value={formData.uniqueId}
             onChange={handleChange}
-            placeholder="Ex: SDL-001"
+            placeholder="Ex: ADL-001"
             className="form-input"
             autoComplete="off"
             style={{ textTransform: 'uppercase' }}
