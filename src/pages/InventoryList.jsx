@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { subscribeToItems, returnToInventory, deleteItem, consignItem, getItemPhoto } from '../services/inventoryService';
+import { subscribeToItems, returnToInventory, deleteItem, consignItem, updateItem, getItemPhoto } from '../services/inventoryService';
 
 const STATUS_LABELS = {
   all: 'Tous',
@@ -21,6 +21,8 @@ export default function InventoryList() {
   const [expandedItem, setExpandedItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadedPhotos, setLoadedPhotos] = useState({});
+  const [editingItem, setEditingItem] = useState(null);
+  const [editForm, setEditForm] = useState({ description: '', price: '', category: '' });
 
   useEffect(() => {
     const unsubscribe = subscribeToItems((data) => {
@@ -69,6 +71,28 @@ export default function InventoryList() {
     inventory: items.filter((i) => i.status === 'inventory').length,
     consignment: items.filter((i) => i.status === 'consignment').length,
     sold: items.filter((i) => i.status === 'sold').length
+  };
+
+  const handleEdit = (item) => {
+    setEditingItem(item.id);
+    setEditForm({
+      description: item.description || '',
+      price: item.price?.toString() || '',
+      category: item.category || ''
+    });
+  };
+
+  const handleSaveEdit = async (item) => {
+    await updateItem(item.id, {
+      description: editForm.description.trim(),
+      price: parseFloat(editForm.price) || 0,
+      category: editForm.category.trim()
+    });
+    setEditingItem(null);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingItem(null);
   };
 
   const handleReturnToInventory = async (item) => {
@@ -213,19 +237,68 @@ export default function InventoryList() {
                   )}
 
                   <div className="item-actions">
-                    {item.status === 'inventory' && (
-                      <button className="btn btn-small btn-consign" onClick={() => handleConsign(item)}>
-                        📍 Consigne
-                      </button>
+                    {/* Formulaire d'édition */}
+                    {editingItem === item.id ? (
+                      <div className="item-edit-form">
+                        <div className="form-group">
+                          <label className="form-label">Description</label>
+                          <input
+                            type="text"
+                            value={editForm.description}
+                            onChange={(e) => setEditForm(f => ({ ...f, description: e.target.value }))}
+                            className="form-input"
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Prix ($)</label>
+                          <input
+                            type="number"
+                            value={editForm.price}
+                            onChange={(e) => setEditForm(f => ({ ...f, price: e.target.value }))}
+                            className="form-input"
+                            step="0.01"
+                            min="0"
+                            inputMode="decimal"
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Catégorie</label>
+                          <input
+                            type="text"
+                            value={editForm.category}
+                            onChange={(e) => setEditForm(f => ({ ...f, category: e.target.value }))}
+                            className="form-input"
+                          />
+                        </div>
+                        <div className="item-edit-actions">
+                          <button className="btn btn-small btn-save" onClick={() => handleSaveEdit(item)}>
+                            ✓ Sauvegarder
+                          </button>
+                          <button className="btn btn-small btn-secondary" onClick={handleCancelEdit}>
+                            Annuler
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <button className="btn btn-small btn-edit" onClick={() => handleEdit(item)}>
+                          ✏️ Modifier
+                        </button>
+                        {item.status === 'inventory' && (
+                          <button className="btn btn-small btn-consign" onClick={() => handleConsign(item)}>
+                            📍 Consigne
+                          </button>
+                        )}
+                        {(item.status === 'consignment' || item.status === 'sold') && (
+                          <button className="btn btn-small btn-return" onClick={() => handleReturnToInventory(item)}>
+                            📦 Retour inventaire
+                          </button>
+                        )}
+                        <button className="btn btn-small btn-delete" onClick={() => handleDelete(item)}>
+                          🗑️ Supprimer
+                        </button>
+                      </>
                     )}
-                    {(item.status === 'consignment' || item.status === 'sold') && (
-                      <button className="btn btn-small btn-return" onClick={() => handleReturnToInventory(item)}>
-                        📦 Retour inventaire
-                      </button>
-                    )}
-                    <button className="btn btn-small btn-delete" onClick={() => handleDelete(item)}>
-                      🗑️ Supprimer
-                    </button>
                   </div>
                 </div>
               )}

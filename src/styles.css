@@ -553,6 +553,43 @@ body {
   flex-wrap: wrap;
 }
 
+.item-edit-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.item-edit-form .form-group {
+  margin-bottom: 0;
+}
+
+.item-edit-form .form-label {
+  font-size: 0.8rem;
+  margin-bottom: 4px;
+}
+
+.item-edit-form .form-input {
+  padding: 8px 10px;
+  font-size: 0.9rem;
+}
+
+.item-edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.btn-save {
+  background: var(--accent, #2ecc71) !important;
+  color: #fff !important;
+}
+
+.btn-edit {
+  background: rgba(52, 152, 219, 0.15) !important;
+  color: #3498db !important;
+}
+
 /* ---- Add Item Page ---- */
 .photo-section {
   margin-bottom: 20px;
@@ -933,4 +970,20 @@ body {
 
 .about-email:hover {
   text-decoration: underline;
+}
+
+.about-donate {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  margin-top: 16px;
+  text-align: center;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+.about-donate-email {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text-primary);
+  margin-top: 4px;
 }

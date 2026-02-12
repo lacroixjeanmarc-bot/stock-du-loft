@@ -39,6 +39,12 @@ export default function AboutPage() {
             📧 lacroix.jeanmarc@gmail.com
           </a>
         </div>
+
+        <div className="about-donate">
+          <p>☕ Vous aimez cette application?</p>
+          <p>Payez-moi un café par Virement Interac :</p>
+          <p className="about-donate-email">lacroix.jeanmarc@gmail.com</p>
+        </div>
       </div>
     </div>
   );
