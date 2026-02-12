@@ -9,9 +9,25 @@ import {
   onValue
 } from 'firebase/database';
 import { database } from '../firebase';
-import { compressImage } from './imageService';
+import { compressImage, compressThumbnail } from './imageService';
 
 const ITEMS_PATH = 'stockduloft/items';
+const PHOTOS_PATH = 'stockduloft/photos';
+
+// ==========================================
+// PHOTOS (stockées séparément pour performance)
+// ==========================================
+
+/**
+ * Récupère la photo d'un item par son ID.
+ * Chargée à la demande, pas avec la liste.
+ */
+export async function getItemPhoto(itemId) {
+  const photoRef = ref(database, `${PHOTOS_PATH}/${itemId}`);
+  const snapshot = await get(photoRef);
+  if (!snapshot.exists()) return null;
+  return snapshot.val().photoBase64 || null;
+}
 
 // ==========================================
 // CRUD ITEMS
@@ -19,20 +35,14 @@ const ITEMS_PATH = 'stockduloft/items';
 
 /**
  * Ajoute un nouvel item à l'inventaire.
- * La photo est compressée et stockée en base64.
+ * La photo est compressée et stockée séparément.
  */
 export async function addItem({ uniqueId, description, price, photoFile, category, itemDate }) {
-  let photoBase64 = '';
-
-  if (photoFile) {
-    photoBase64 = await compressImage(photoFile);
-  }
-
   const itemData = {
     uniqueId: uniqueId.toUpperCase().trim(),
     description: description.trim(),
     price: parseFloat(price),
-    photoBase64,
+    hasPhoto: false,
     category: category || '',
     status: 'inventory',
     itemDate: itemDate || new Date().toISOString().split('T')[0],
@@ -47,6 +57,21 @@ export async function addItem({ uniqueId, description, price, photoFile, categor
   const itemsRef = ref(database, ITEMS_PATH);
   const newRef = push(itemsRef);
   await update(newRef, itemData);
+
+  // Stocker la photo séparément + miniature dans l'item
+  if (photoFile) {
+    const [photoBase64, thumbnail] = await Promise.all([
+      compressImage(photoFile),
+      compressThumbnail(photoFile)
+    ]);
+    const photoRef = ref(database, `${PHOTOS_PATH}/${newRef.key}`);
+    await update(photoRef, { photoBase64 });
+    // Miniature dans l'item + flag hasPhoto
+    await update(newRef, { hasPhoto: true, thumbnail });
+    itemData.hasPhoto = true;
+    itemData.thumbnail = thumbnail;
+  }
+
   return { id: newRef.key, ...itemData };
 }
 
@@ -62,15 +87,17 @@ export async function updateItem(itemId, updates) {
 }
 
 /**
- * Supprime un item.
+ * Supprime un item et sa photo.
  */
 export async function deleteItem(itemId) {
   const itemRef = ref(database, `${ITEMS_PATH}/${itemId}`);
+  const photoRef = ref(database, `${PHOTOS_PATH}/${itemId}`);
+  await remove(photoRef);
   await remove(itemRef);
 }
 
 /**
- * Récupère un item par son numéro unique.
+ * Récupère un item par son numéro unique (avec photo pour vente rapide).
  */
 export async function getItemByUniqueId(uniqueId) {
   const itemsRef = ref(database, ITEMS_PATH);
@@ -87,6 +114,11 @@ export async function getItemByUniqueId(uniqueId) {
       found = { id: child.key, ...data };
     }
   });
+
+  // Charger la photo pour l'écran de vente
+  if (found && found.hasPhoto) {
+    found.photoBase64 = await getItemPhoto(found.id);
+  }
 
   return found;
 }
@@ -124,12 +156,13 @@ export async function getNextUniqueId(prefix = 'ADL') {
 /**
  * Marque un item comme vendu.
  */
-export async function sellItem(itemId, sellerName, saleDate = null, salePrice = null) {
+export async function sellItem(itemId, sellerName, saleDate = null, salePrice = null, marketName = '') {
   const itemRef = ref(database, `${ITEMS_PATH}/${itemId}`);
   const updates = {
     status: 'sold',
     sellerName: sellerName.trim(),
     saleDate: saleDate || new Date().toISOString().split('T')[0],
+    marketName: marketName.trim(),
     updatedAt: Date.now()
   };
   if (salePrice !== null) {
@@ -162,6 +195,7 @@ export async function returnToInventory(itemId) {
     consignmentDate: null,
     saleDate: null,
     salePrice: null,
+    marketName: '',
     sellerName: '',
     updatedAt: Date.now()
   });
@@ -173,6 +207,7 @@ export async function returnToInventory(itemId) {
 
 /**
  * Écoute les changements de l'inventaire en temps réel.
+ * Les photos ne sont PAS chargées ici (performance).
  * Retourne une fonction unsubscribe.
  */
 export function subscribeToItems(callback) {

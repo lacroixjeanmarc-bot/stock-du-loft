@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { subscribeToItems, returnToInventory, deleteItem, consignItem } from '../services/inventoryService';
+import { subscribeToItems, returnToInventory, deleteItem, consignItem, getItemPhoto } from '../services/inventoryService';
 
 const STATUS_LABELS = {
   all: 'Tous',
@@ -20,6 +20,7 @@ export default function InventoryList() {
   const [search, setSearch] = useState('');
   const [expandedItem, setExpandedItem] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadedPhotos, setLoadedPhotos] = useState({});
 
   useEffect(() => {
     const unsubscribe = subscribeToItems((data) => {
@@ -28,6 +29,29 @@ export default function InventoryList() {
     });
     return unsubscribe;
   }, []);
+
+  // Charger la photo quand on ouvre un item
+  const handleExpand = async (item) => {
+    if (expandedItem === item.id) {
+      setExpandedItem(null);
+      return;
+    }
+    setExpandedItem(item.id);
+
+    // Charger la photo si pas déjà en cache
+    if (!loadedPhotos[item.id]) {
+      if (item.photoBase64) {
+        // Ancien format: photo directement dans l'item
+        setLoadedPhotos((prev) => ({ ...prev, [item.id]: item.photoBase64 }));
+      } else if (item.hasPhoto) {
+        // Nouveau format: photo séparée
+        const photo = await getItemPhoto(item.id);
+        if (photo) {
+          setLoadedPhotos((prev) => ({ ...prev, [item.id]: photo }));
+        }
+      }
+    }
+  };
 
   // Filtrer les items
   const filteredItems = items.filter((item) => {
@@ -58,6 +82,11 @@ export default function InventoryList() {
     if (confirm(`Supprimer définitivement "${item.uniqueId}"?`)) {
       await deleteItem(item.id);
       setExpandedItem(null);
+      setLoadedPhotos((prev) => {
+        const copy = { ...prev };
+        delete copy[item.id];
+        return copy;
+      });
     }
   };
 
@@ -120,13 +149,15 @@ export default function InventoryList() {
             <div
               key={item.id}
               className={`item-card ${expandedItem === item.id ? 'expanded' : ''}`}
-              onClick={() => setExpandedItem(expandedItem === item.id ? null : item.id)}
+              onClick={() => handleExpand(item)}
             >
               <div className="item-row">
-                {/* Photo thumbnail */}
+                {/* Miniature ou placeholder */}
                 <div className="item-photo">
-                  {item.photoBase64 ? (
-                    <img src={item.photoBase64} alt={item.description} loading="lazy" />
+                  {item.thumbnail ? (
+                    <img src={item.thumbnail} alt={item.description} className="item-thumbnail" />
+                  ) : item.hasPhoto || item.photoBase64 ? (
+                    <div className="photo-placeholder">🖼️</div>
                   ) : (
                     <div className="photo-placeholder">📷</div>
                   )}
@@ -159,28 +190,43 @@ export default function InventoryList() {
                           : ''
                         }
                         {item.saleDate} — {item.sellerName}
+                        {item.marketName ? ` · 📍 ${item.marketName}` : ''}
                       </span>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Actions (expanded) */}
+              {/* Expanded: photo + actions */}
               {expandedItem === item.id && (
-                <div className="item-actions" onClick={(e) => e.stopPropagation()}>
-                  {item.status === 'inventory' && (
-                    <button className="btn btn-small btn-consign" onClick={() => handleConsign(item)}>
-                      📍 Consigne
-                    </button>
+                <div onClick={(e) => e.stopPropagation()}>
+                  {/* Photo chargée à la demande */}
+                  {loadedPhotos[item.id] && (
+                    <div className="item-expanded-photo">
+                      <img src={loadedPhotos[item.id]} alt={item.description} />
+                    </div>
                   )}
-                  {(item.status === 'consignment' || item.status === 'sold') && (
-                    <button className="btn btn-small btn-return" onClick={() => handleReturnToInventory(item)}>
-                      📦 Retour inventaire
-                    </button>
+                  {item.hasPhoto && !loadedPhotos[item.id] && (
+                    <div className="item-expanded-photo loading">
+                      <div className="loading-spinner" />
+                    </div>
                   )}
-                  <button className="btn btn-small btn-delete" onClick={() => handleDelete(item)}>
-                    🗑️ Supprimer
-                  </button>
+
+                  <div className="item-actions">
+                    {item.status === 'inventory' && (
+                      <button className="btn btn-small btn-consign" onClick={() => handleConsign(item)}>
+                        📍 Consigne
+                      </button>
+                    )}
+                    {(item.status === 'consignment' || item.status === 'sold') && (
+                      <button className="btn btn-small btn-return" onClick={() => handleReturnToInventory(item)}>
+                        📦 Retour inventaire
+                      </button>
+                    )}
+                    <button className="btn btn-small btn-delete" onClick={() => handleDelete(item)}>
+                      🗑️ Supprimer
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

@@ -10,6 +10,7 @@ export default function QuickSale() {
   const [sellerName, setSellerName] = useState(user?.displayName?.split(' ')[0] || '');
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   const [salePrice, setSalePrice] = useState('');
+  const [marketName, setMarketName] = useState(() => localStorage.getItem('sdl_marketName') || '');
   const [searching, setSearching] = useState(false);
   const [selling, setSelling] = useState(false);
   const [error, setError] = useState('');
@@ -55,8 +56,8 @@ export default function QuickSale() {
 
     try {
       const finalPrice = parseFloat(salePrice) || foundItem.price;
-      await sellItem(foundItem.id, sellerName, saleDate, finalPrice);
-      setSuccess(`✓ ${foundItem.uniqueId} vendu pour ${finalPrice.toFixed(2)} $ par ${sellerName}`);
+      await sellItem(foundItem.id, sellerName, saleDate, finalPrice, marketName);
+      setSuccess(`✓ ${foundItem.uniqueId} vendu pour ${finalPrice.toFixed(2)} $${marketName ? ` au ${marketName}` : ''}`);
       setFoundItem(null);
       setSearchId('');
       setSalePrice('');
@@ -87,7 +88,7 @@ export default function QuickSale() {
             type="text"
             value={searchId}
             onChange={(e) => setSearchId(e.target.value.toUpperCase())}
-            placeholder="Numéro de l'item (ex: ADL-001)"
+            placeholder="Numéro de l'item (ex: SDL-001)"
             className="form-input sale-search-input"
             autoComplete="off"
             autoFocus
@@ -172,6 +173,20 @@ export default function QuickSale() {
                 onChange={(e) => setSellerName(e.target.value)}
                 className="form-input"
                 placeholder="Nom de la vendeuse"
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Marché / Point de vente</label>
+              <input
+                type="text"
+                value={marketName}
+                onChange={(e) => {
+                  setMarketName(e.target.value);
+                  localStorage.setItem('sdl_marketName', e.target.value);
+                }}
+                className="form-input"
+                placeholder="Ex: Marché Jean-Talon, Facebook, etc."
               />
             </div>
 
