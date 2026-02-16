@@ -5,7 +5,9 @@ import AddItem from './pages/AddItem';
 import QuickSale from './pages/QuickSale';
 import AboutPage from './pages/AboutPage';
 import Vitrine from './pages/Vitrine';
+import AdminPage from './pages/AdminPage';
 import LoginPage from './pages/LoginPage';
+import { isSuperAdmin } from './services/adminService';
 
 function AppContent() {
   const { user, logout } = useAuth();
@@ -45,6 +47,7 @@ function AppContent() {
           <Route path="/add" element={<AddItem />} />
           <Route path="/sale" element={<QuickSale />} />
           <Route path="/about" element={<AboutPage />} />
+          <Route path="/admin" element={<AdminPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
@@ -67,6 +70,12 @@ function AppContent() {
           <span className="nav-icon">ℹ️</span>
           <span className="nav-label">Info</span>
         </NavLink>
+        {isSuperAdmin(user) && (
+          <NavLink to="/admin" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <span className="nav-icon">🛡️</span>
+            <span className="nav-label">Admin</span>
+          </NavLink>
+        )}
       </nav>
     </div>
   );
