@@ -4,17 +4,14 @@ import { compressImage, compressThumbnail } from './imageService';
 
 const ITEMS_PATH = 'stockduloft/items';
 const PHOTOS_PATH = 'stockduloft/photos';
+const STORES_PATH = 'stockduloft/stores';
 
-const MAX_EXTRA_PHOTOS = 4; // 1 principale + 4 extras = 5 max
+const MAX_EXTRA_PHOTOS = 4;
 
 // ==========================================
-// PHOTOS (stockées séparément pour performance)
+// PHOTOS
 // ==========================================
 
-/**
- * Récupère la photo principale d'un item par son ID.
- * Rétrocompatible avec l'ancien format.
- */
 export async function getItemPhoto(itemId) {
   const photoRef = ref(database, `${PHOTOS_PATH}/${itemId}`);
   const snapshot = await get(photoRef);
@@ -22,10 +19,6 @@ export async function getItemPhoto(itemId) {
   return snapshot.val().photoBase64 || null;
 }
 
-/**
- * Récupère toutes les photos d'un item (principale + extras).
- * Retourne un tableau de base64 strings.
- */
 export async function getAllItemPhotos(itemId) {
   const photoRef = ref(database, `${PHOTOS_PATH}/${itemId}`);
   const snapshot = await get(photoRef);
@@ -33,64 +26,38 @@ export async function getAllItemPhotos(itemId) {
 
   const data = snapshot.val();
   const photos = [];
-
-  // Photo principale
-  if (data.photoBase64) {
-    photos.push(data.photoBase64);
-  }
-
-  // Photos extras (photo_1, photo_2, photo_3, photo_4)
+  if (data.photoBase64) photos.push(data.photoBase64);
   for (let i = 1; i <= MAX_EXTRA_PHOTOS; i++) {
-    if (data[`photo_${i}`]) {
-      photos.push(data[`photo_${i}`]);
-    }
+    if (data[`photo_${i}`]) photos.push(data[`photo_${i}`]);
   }
-
   return photos;
 }
 
-/**
- * Ajoute une photo supplémentaire à un item existant.
- * Retourne l'index de la photo ajoutée (1-4) ou null si max atteint.
- */
 export async function addExtraPhoto(itemId, photoFile) {
   const photoRef = ref(database, `${PHOTOS_PATH}/${itemId}`);
   const snapshot = await get(photoRef);
-
-  // Trouver le prochain slot disponible
   const data = snapshot.exists() ? snapshot.val() : {};
+
   let nextSlot = null;
   for (let i = 1; i <= MAX_EXTRA_PHOTOS; i++) {
-    if (!data[`photo_${i}`]) {
-      nextSlot = i;
-      break;
-    }
+    if (!data[`photo_${i}`]) { nextSlot = i; break; }
   }
-
-  if (nextSlot === null) return null; // Max atteint
+  if (nextSlot === null) return null;
 
   const compressed = await compressImage(photoFile);
   await update(photoRef, { [`photo_${nextSlot}`]: compressed });
 
-  // Mettre à jour le photoCount dans l'item
   const currentCount = countPhotos(data) + 1;
   const itemRef = ref(database, `${ITEMS_PATH}/${itemId}`);
   await update(itemRef, { photoCount: currentCount, updatedAt: Date.now() });
-
   return nextSlot;
 }
 
-/**
- * Supprime une photo extra d'un item.
- * index: 1-4 (pas la photo principale)
- */
 export async function deleteExtraPhoto(itemId, index) {
   if (index < 1 || index > MAX_EXTRA_PHOTOS) return;
-
   const photoRef = ref(database, `${PHOTOS_PATH}/${itemId}`);
   await update(photoRef, { [`photo_${index}`]: null });
 
-  // Recalculer le photoCount
   const snapshot = await get(photoRef);
   const data = snapshot.exists() ? snapshot.val() : {};
   const count = countPhotos(data);
@@ -98,9 +65,6 @@ export async function deleteExtraPhoto(itemId, index) {
   await update(itemRef, { photoCount: count, updatedAt: Date.now() });
 }
 
-/**
- * Compte le nombre de photos dans un objet photo.
- */
 function countPhotos(photoData) {
   let count = 0;
   if (photoData.photoBase64) count++;
@@ -111,13 +75,90 @@ function countPhotos(photoData) {
 }
 
 // ==========================================
-// CRUD ITEMS
+// MAGASINS (STORES)
 // ==========================================
 
 /**
- * Ajoute un nouvel item à l'inventaire.
- * La photo est compressée et stockée séparément.
+ * Écoute les magasins en temps réel.
  */
+export function subscribeToStores(callback) {
+  const storesRef = ref(database, STORES_PATH);
+  const unsubscribe = onValue(storesRef, (snapshot) => {
+    const stores = [];
+    if (snapshot.exists()) {
+      snapshot.forEach((child) => {
+        stores.push({ id: child.key, ...child.val() });
+      });
+    }
+    stores.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    callback(stores);
+  });
+  return unsubscribe;
+}
+
+/**
+ * Récupère tous les magasins (one-shot).
+ */
+export async function getStores() {
+  const storesRef = ref(database, STORES_PATH);
+  const snapshot = await get(storesRef);
+  const stores = [];
+  if (snapshot.exists()) {
+    snapshot.forEach((child) => {
+      stores.push({ id: child.key, ...child.val() });
+    });
+  }
+  stores.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  return stores;
+}
+
+/**
+ * Récupère un magasin par ID.
+ */
+export async function getStore(storeId) {
+  const storeRef = ref(database, `${STORES_PATH}/${storeId}`);
+  const snapshot = await get(storeRef);
+  if (!snapshot.exists()) return null;
+  return { id: storeId, ...snapshot.val() };
+}
+
+/**
+ * Ajoute un nouveau magasin.
+ */
+export async function addStore({ name, commissionPercent, locationFee }) {
+  const storeData = {
+    name: name.trim(),
+    commissionPercent: parseFloat(commissionPercent) || 0,
+    locationFee: parseFloat(locationFee) || 0,
+    active: true,
+    createdAt: Date.now()
+  };
+  const storesRef = ref(database, STORES_PATH);
+  const newRef = push(storesRef);
+  await update(newRef, storeData);
+  return { id: newRef.key, ...storeData };
+}
+
+/**
+ * Met à jour un magasin.
+ */
+export async function updateStore(storeId, updates) {
+  const storeRef = ref(database, `${STORES_PATH}/${storeId}`);
+  await update(storeRef, updates);
+}
+
+/**
+ * Supprime un magasin.
+ */
+export async function deleteStore(storeId) {
+  const storeRef = ref(database, `${STORES_PATH}/${storeId}`);
+  await remove(storeRef);
+}
+
+// ==========================================
+// CRUD ITEMS
+// ==========================================
+
 export async function addItem({ uniqueId, description, longDescription, price, photoFile, category, itemDate }) {
   const itemData = {
     uniqueId: uniqueId.toUpperCase().trim(),
@@ -130,6 +171,7 @@ export async function addItem({ uniqueId, description, longDescription, price, p
     status: 'inventory',
     itemDate: itemDate || new Date().toISOString().split('T')[0],
     consignmentStore: '',
+    consignmentStoreId: '',
     consignmentDate: null,
     saleDate: null,
     sellerName: '',
@@ -141,7 +183,6 @@ export async function addItem({ uniqueId, description, longDescription, price, p
   const newRef = push(itemsRef);
   await update(newRef, itemData);
 
-  // Stocker la photo séparément + miniature dans l'item
   if (photoFile) {
     const [photoBase64, thumbnail] = await Promise.all([
       compressImage(photoFile),
@@ -149,8 +190,6 @@ export async function addItem({ uniqueId, description, longDescription, price, p
     ]);
     const photoRef = ref(database, `${PHOTOS_PATH}/${newRef.key}`);
     await update(photoRef, { photoBase64 });
-
-    // Miniature dans l'item + flag hasPhoto
     await update(newRef, { hasPhoto: true, thumbnail, photoCount: 1 });
     itemData.hasPhoto = true;
     itemData.thumbnail = thumbnail;
@@ -160,17 +199,11 @@ export async function addItem({ uniqueId, description, longDescription, price, p
   return { id: newRef.key, ...itemData };
 }
 
-/**
- * Met à jour un item existant.
- */
 export async function updateItem(itemId, updates) {
   const itemRef = ref(database, `${ITEMS_PATH}/${itemId}`);
   await update(itemRef, { ...updates, updatedAt: Date.now() });
 }
 
-/**
- * Supprime un item et sa photo.
- */
 export async function deleteItem(itemId) {
   const itemRef = ref(database, `${ITEMS_PATH}/${itemId}`);
   const photoRef = ref(database, `${PHOTOS_PATH}/${itemId}`);
@@ -178,9 +211,6 @@ export async function deleteItem(itemId) {
   await remove(itemRef);
 }
 
-/**
- * Récupère un item par son numéro unique (avec photo pour vente rapide).
- */
 export async function getItemByUniqueId(uniqueId) {
   const itemsRef = ref(database, ITEMS_PATH);
   const snapshot = await get(itemsRef);
@@ -196,7 +226,6 @@ export async function getItemByUniqueId(uniqueId) {
     }
   });
 
-  // Charger la photo pour l'écran de vente
   if (found && found.hasPhoto) {
     found.photoBase64 = await getItemPhoto(found.id);
   }
@@ -204,10 +233,6 @@ export async function getItemByUniqueId(uniqueId) {
   return found;
 }
 
-/**
- * Suggère le prochain numéro unique disponible.
- * Format: ADL-001, ADL-002, etc.
- */
 export async function getNextUniqueId(prefix = 'ADL') {
   const itemsRef = ref(database, ITEMS_PATH);
   const snapshot = await get(itemsRef);
@@ -230,54 +255,74 @@ export async function getNextUniqueId(prefix = 'ADL') {
 }
 
 // ==========================================
-// VENTE
+// VENTE (avec support commission consigne)
 // ==========================================
 
 /**
  * Marque un item comme vendu.
+ * Si l'item était en consigne, calcule la commission.
  */
 export async function sellItem(itemId, sellerName, saleDate = null, salePrice = null, marketName = '', isGift = false, giftNote = '') {
   const itemRef = ref(database, `${ITEMS_PATH}/${itemId}`);
+  const itemSnap = await get(itemRef);
+  const itemData = itemSnap.exists() ? itemSnap.val() : {};
+
+  const finalPrice = isGift ? 0 : (salePrice !== null ? parseFloat(salePrice) : itemData.price);
+
   const updates = {
     status: 'sold',
     sellerName: sellerName.trim(),
     saleDate: saleDate || new Date().toISOString().split('T')[0],
+    salePrice: finalPrice,
     marketName: marketName.trim(),
     isGift: isGift,
     giftNote: isGift ? giftNote.trim() : '',
     updatedAt: Date.now()
   };
 
-  if (isGift) {
-    updates.salePrice = 0;
-  } else if (salePrice !== null) {
-    updates.salePrice = parseFloat(salePrice);
+  // Calculer la commission si l'item était en consigne
+  if (itemData.status === 'consignment' && itemData.consignmentStoreId && !isGift) {
+    const store = await getStore(itemData.consignmentStoreId);
+    if (store && store.commissionPercent > 0) {
+      const commissionAmount = Math.round(finalPrice * store.commissionPercent) / 100;
+      updates.commissionPercent = store.commissionPercent;
+      updates.commissionAmount = commissionAmount;
+      updates.netRevenue = Math.round((finalPrice - commissionAmount) * 100) / 100;
+    } else {
+      updates.commissionPercent = 0;
+      updates.commissionAmount = 0;
+      updates.netRevenue = finalPrice;
+    }
   }
 
   await update(itemRef, updates);
+  return updates;
 }
 
 /**
  * Met un item en consigne chez un marchand.
+ * Accepte un storeId pour lier au magasin sauvegardé.
  */
-export async function consignItem(itemId, storeName, consignmentDate = null) {
+export async function consignItem(itemId, storeName, consignmentDate = null, storeId = '') {
   const itemRef = ref(database, `${ITEMS_PATH}/${itemId}`);
   await update(itemRef, {
     status: 'consignment',
     consignmentStore: storeName.trim(),
+    consignmentStoreId: storeId,
     consignmentDate: consignmentDate || new Date().toISOString().split('T')[0],
     updatedAt: Date.now()
   });
 }
 
 /**
- * Remet un item en inventaire (annuler vente ou retour de consigne).
+ * Remet un item en inventaire.
  */
 export async function returnToInventory(itemId) {
   const itemRef = ref(database, `${ITEMS_PATH}/${itemId}`);
   await update(itemRef, {
     status: 'inventory',
     consignmentStore: '',
+    consignmentStoreId: '',
     consignmentDate: null,
     saleDate: null,
     salePrice: null,
@@ -285,6 +330,9 @@ export async function returnToInventory(itemId) {
     sellerName: '',
     isGift: false,
     giftNote: '',
+    commissionPercent: null,
+    commissionAmount: null,
+    netRevenue: null,
     updatedAt: Date.now()
   });
 }
@@ -293,11 +341,6 @@ export async function returnToInventory(itemId) {
 // ÉCOUTE EN TEMPS RÉEL
 // ==========================================
 
-/**
- * Écoute les changements de l'inventaire en temps réel.
- * Les photos ne sont PAS chargées ici (performance).
- * Retourne une fonction unsubscribe.
- */
 export function subscribeToItems(callback) {
   const itemsRef = ref(database, ITEMS_PATH);
   const unsubscribe = onValue(itemsRef, (snapshot) => {
@@ -307,7 +350,6 @@ export function subscribeToItems(callback) {
         items.push({ id: child.key, ...child.val() });
       });
     }
-    // Trier par date de création (plus récent en premier)
     items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     callback(items);
   });

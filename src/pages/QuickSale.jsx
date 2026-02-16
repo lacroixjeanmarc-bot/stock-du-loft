@@ -1,12 +1,16 @@
 import { useState } from 'react';
-import { getItemByUniqueId, sellItem } from '../services/inventoryService';
+import { getItemByUniqueId, sellItem, getStore } from '../services/inventoryService';
 import { useAuth } from '../hooks/useAuth';
+
+function formatPrice(price) {
+  return price?.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+}
 
 export default function QuickSale() {
   const { user } = useAuth();
-
   const [searchId, setSearchId] = useState('ADL-');
   const [foundItem, setFoundItem] = useState(null);
+  const [storeInfo, setStoreInfo] = useState(null);
   const [sellerName, setSellerName] = useState(user?.displayName?.split(' ')[0] || '');
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   const [salePrice, setSalePrice] = useState('');
@@ -21,27 +25,30 @@ export default function QuickSale() {
   const handleSearch = async (e) => {
     e?.preventDefault();
     if (!searchId.trim()) return;
-
     setSearching(true);
     setError('');
     setSuccess('');
     setFoundItem(null);
+    setStoreInfo(null);
 
     try {
       const item = await getItemByUniqueId(searchId);
-
       if (!item) {
         setError(`Aucun item trouvé avec le numéro "${searchId.toUpperCase()}"`);
         return;
       }
-
       if (item.status === 'sold') {
         setError(`Cet item est déjà vendu (${item.saleDate} par ${item.sellerName})`);
         return;
       }
-
       setFoundItem(item);
       setSalePrice(item.price?.toFixed(2) || '');
+
+      // Charger les infos du magasin si en consigne
+      if (item.status === 'consignment' && item.consignmentStoreId) {
+        const store = await getStore(item.consignmentStoreId);
+        setStoreInfo(store);
+      }
     } catch (err) {
       console.error(err);
       setError('Erreur de recherche. Réessayez.');
@@ -50,20 +57,38 @@ export default function QuickSale() {
     }
   };
 
+  // Calcul de la commission en temps réel
+  const getCommissionPreview = () => {
+    if (!storeInfo || !storeInfo.commissionPercent || isGift) return null;
+    const price = parseFloat(salePrice) || 0;
+    const commissionAmount = Math.round(price * storeInfo.commissionPercent) / 100;
+    const netRevenue = Math.round((price - commissionAmount) * 100) / 100;
+    return { commissionAmount, netRevenue, percent: storeInfo.commissionPercent };
+  };
+
+  const commissionPreview = getCommissionPreview();
+
   const handleSell = async () => {
     if (!foundItem || !sellerName.trim()) return;
-
     setSelling(true);
     setError('');
 
     try {
       const finalPrice = isGift ? 0 : (parseFloat(salePrice) || foundItem.price);
-      await sellItem(foundItem.id, sellerName, saleDate, finalPrice, marketName, isGift, giftNote);
-      const msg = isGift
-        ? `✓ ${foundItem.uniqueId} donné en cadeau${giftNote ? ` — ${giftNote}` : ''}`
-        : `✓ ${foundItem.uniqueId} vendu pour ${finalPrice.toFixed(2)} $${marketName ? ` au ${marketName}` : ''}`;
+      const result = await sellItem(foundItem.id, sellerName, saleDate, finalPrice, marketName, isGift, giftNote);
+
+      let msg;
+      if (isGift) {
+        msg = `✓ ${foundItem.uniqueId} donné en cadeau${giftNote ? ` — ${giftNote}` : ''}`;
+      } else if (result.commissionAmount > 0) {
+        msg = `✓ ${foundItem.uniqueId} vendu pour ${formatPrice(finalPrice)} $\n💸 Commission ${foundItem.consignmentStore}: -${formatPrice(result.commissionAmount)} $\n✅ Revenu net: ${formatPrice(result.netRevenue)} $`;
+      } else {
+        msg = `✓ ${foundItem.uniqueId} vendu pour ${formatPrice(finalPrice)} $${marketName ? ` au ${marketName}` : ''}`;
+      }
+
       setSuccess(msg);
       setFoundItem(null);
+      setStoreInfo(null);
       setSearchId('ADL-');
       setSalePrice('');
       setIsGift(false);
@@ -79,6 +104,7 @@ export default function QuickSale() {
   const resetSearch = () => {
     setSearchId('ADL-');
     setFoundItem(null);
+    setStoreInfo(null);
     setSalePrice('');
     setError('');
     setSuccess('');
@@ -115,7 +141,7 @@ export default function QuickSale() {
       {/* Message de succès */}
       {success && (
         <div className="sale-success">
-          <p>{success}</p>
+          <p style={{ whiteSpace: 'pre-line' }}>{success}</p>
           <button className="btn btn-primary btn-full" onClick={resetSearch}>
             Prochaine vente
           </button>
@@ -138,16 +164,27 @@ export default function QuickSale() {
           {/* Photo et info de l'item */}
           <div className="sale-item-card">
             {foundItem.photoBase64 ? (
-              <img src={foundItem.photoBase64} alt={foundItem.description} className="sale-item-photo" />
+              <img
+                src={foundItem.photoBase64}
+                alt={foundItem.description}
+                className="sale-item-photo"
+              />
             ) : (
               <div className="sale-photo-placeholder">📷</div>
             )}
             <div className="sale-item-details">
               <span className="sale-item-id">#{foundItem.uniqueId}</span>
               <p className="sale-item-desc">{foundItem.description}</p>
-              <p className="sale-item-price">{foundItem.price?.toFixed(2)} $</p>
+              <p className="sale-item-price">{formatPrice(foundItem.price)} $</p>
               {foundItem.status === 'consignment' && (
-                <p className="sale-item-consign">📍 En consigne: {foundItem.consignmentStore}</p>
+                <p className="sale-item-consign">
+                  📍 En consigne: {foundItem.consignmentStore}
+                  {storeInfo && storeInfo.commissionPercent > 0 && (
+                    <span className="sale-commission-badge">
+                      {storeInfo.commissionPercent}% commission
+                    </span>
+                  )}
+                </p>
               )}
             </div>
           </div>
@@ -184,7 +221,7 @@ export default function QuickSale() {
               </div>
             )}
 
-            {/* Prix de vente (caché si cadeau) */}
+            {/* Prix de vente */}
             {!isGift && (
               <div className="form-group">
                 <label className="form-label">Prix de vente ($)</label>
@@ -200,9 +237,27 @@ export default function QuickSale() {
                   />
                   {parseFloat(salePrice) < foundItem.price && (
                     <span className="sale-discount">
-                      Rabais de {(foundItem.price - parseFloat(salePrice)).toFixed(2)} $
+                      Rabais de {formatPrice(foundItem.price - parseFloat(salePrice))} $
                     </span>
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* Aperçu commission si article en consigne */}
+            {commissionPreview && (
+              <div className="sale-commission-preview">
+                <div className="commission-row">
+                  <span>Prix de vente</span>
+                  <span>{formatPrice(parseFloat(salePrice))} $</span>
+                </div>
+                <div className="commission-row commission-negative">
+                  <span>Commission {foundItem.consignmentStore} ({commissionPreview.percent}%)</span>
+                  <span>-{formatPrice(commissionPreview.commissionAmount)} $</span>
+                </div>
+                <div className="commission-row commission-total">
+                  <span>Revenu net pour Josée</span>
+                  <span>{formatPrice(commissionPreview.netRevenue)} $</span>
                 </div>
               </div>
             )}
@@ -252,7 +307,9 @@ export default function QuickSale() {
                   ? 'En cours...'
                   : isGift
                     ? '🎁 Confirmer le cadeau'
-                    : `Confirmer la vente — ${parseFloat(salePrice || 0).toFixed(2)} $`
+                    : commissionPreview
+                      ? `Confirmer — Net: ${formatPrice(commissionPreview.netRevenue)} $`
+                      : `Confirmer la vente — ${formatPrice(parseFloat(salePrice || 0))} $`
                 }
               </button>
               <button className="btn btn-secondary btn-full" onClick={resetSearch}>

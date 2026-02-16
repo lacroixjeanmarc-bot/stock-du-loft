@@ -58,13 +58,12 @@ export default function AddItem() {
     setError('');
   };
 
-  // AI : remplir titre, description détaillée et catégorie à partir de la photo
+  // AI : remplir catégorie et description à partir de la photo
   const handleAiSuggestion = (suggestion) => {
     setFormData((prev) => ({
       ...prev,
       ...(suggestion.category ? { category: suggestion.category } : {}),
-      ...(suggestion.title ? { description: suggestion.title } : {}),
-      ...(suggestion.description ? { longDescription: suggestion.description } : {}),
+      ...(suggestion.description ? { description: suggestion.description } : {}),
     }));
   };
 

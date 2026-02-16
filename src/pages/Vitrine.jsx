@@ -271,7 +271,7 @@ export default function Vitrine() {
                         </div>
                       )}
 
-                      {item.status === 'consignment' && (
+                      {item.status === 'consignment' && item.consignmentStore && (
                         <p className="vitrine-detail-consignment">
                           📍 Disponible chez: {item.consignmentStore}
                         </p>

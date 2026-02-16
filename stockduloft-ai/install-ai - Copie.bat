@@ -7,60 +7,53 @@ echo.
 
 REM Verifier qu'on est dans le bon dossier
 if not exist "src\pages\AddItem.jsx" (
-    echo ERREUR: Ce script doit etre execute depuis D:\stock-du-loft
+    echo ERREUR: Ce script doit etre execute depuis D:\stockduloft
+    echo Lancez: cd /d D:\stockduloft puis install-ai.bat
     pause
     exit /b 1
 )
 
-echo [1/7] Creation du dossier functions...
+echo [1/6] Creation du dossier functions...
 if not exist "functions" mkdir functions
 
-echo [2/7] Copie functions\package.json...
+echo [2/6] Copie de functions\package.json...
 copy /Y "stockduloft-ai\functions\package.json" "functions\package.json"
 
-echo [3/7] Copie functions\index.js...
+echo [3/6] Copie de functions\index.js...
 copy /Y "stockduloft-ai\functions\index.js" "functions\index.js"
 
-echo [4/7] Copie src\services\aiService.js...
+echo [4/6] Copie de src\services\aiService.js...
 copy /Y "stockduloft-ai\src\services\aiService.js" "src\services\aiService.js"
 
-echo [5/7] Creation src\components et copie AiSuggestButton.jsx...
+echo [5/6] Creation de src\components et copie du bouton AI...
 if not exist "src\components" mkdir src\components
 copy /Y "stockduloft-ai\src\components\AiSuggestButton.jsx" "src\components\AiSuggestButton.jsx"
 
-echo [6/7] Remplacement AddItem.jsx et firebase.json...
-copy /Y "stockduloft-ai\AddItem.jsx" "src\pages\AddItem.jsx"
-copy /Y "stockduloft-ai\firebase.json" "firebase.json"
-
-echo [7/7] Installation des dependances Cloud Functions...
+echo [6/6] Installation des dependances Cloud Functions...
 cd functions
 call npm install
 cd ..
 
 echo.
 echo ==========================================
-echo  INSTALLATION TERMINEE!
+echo  FICHIERS COPIES AVEC SUCCES!
 echo ==========================================
 echo.
-echo Fichiers crees/modifies:
-echo   [NOUVEAU]   functions\index.js
-echo   [NOUVEAU]   functions\package.json
-echo   [NOUVEAU]   src\services\aiService.js
-echo   [NOUVEAU]   src\components\AiSuggestButton.jsx
-echo   [MODIFIE]   src\pages\AddItem.jsx
-echo   [MODIFIE]   firebase.json
+echo PROCHAINES ETAPES MANUELLES:
 echo.
-echo PROCHAINES ETAPES:
+echo 1. Modifiez AddItem.jsx (3 ajouts - voir LISEZMOI.txt)
 echo.
-echo 1. Configurez la cle API Anthropic:
+echo 2. Mettez a jour firebase.json (ajoutez section functions)
+echo.
+echo 3. Configurez la cle API Anthropic:
 echo    firebase functions:secrets:set ANTHROPIC_API_KEY
 echo    (collez votre cle sk-ant-... quand demande)
 echo.
-echo 2. Deployez:
+echo 4. Deployez:
 echo    firebase deploy --only functions
 echo    npm run build
 echo    firebase deploy --only hosting
 echo.
-echo 3. Testez! Prenez une photo et cliquez "Suggestion AI"
+echo 5. Testez! Prenez une photo et cliquez "Suggestion AI"
 echo ==========================================
 pause
