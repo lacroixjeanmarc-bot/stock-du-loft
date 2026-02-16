@@ -45,6 +45,14 @@ export default function AboutPage() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
 
+  // Tax settings
+  const [taxEnabled, setTaxEnabled] = useState(false);
+  const [tpsRate, setTpsRate] = useState('5');
+  const [tvqRate, setTvqRate] = useState('9.975');
+  const [tpsNumber, setTpsNumber] = useState('');
+  const [tvqNumber, setTvqNumber] = useState('');
+  const [showTaxInfo, setShowTaxInfo] = useState(false);
+
   useEffect(() => {
     const settingsRef = ref(database, SETTINGS_PATH);
     const unsub = onValue(settingsRef, (snap) => {
@@ -57,6 +65,14 @@ export default function AboutPage() {
           setSubscription(data.subscription);
         } else {
           setSubscription({ plan: 'free', planType: null, startDate: null, expiryDate: null });
+        }
+        // Load tax settings
+        if (data.taxes) {
+          setTaxEnabled(data.taxes.enabled || false);
+          if (data.taxes.tpsRate !== undefined) setTpsRate(data.taxes.tpsRate.toString());
+          if (data.taxes.tvqRate !== undefined) setTvqRate(data.taxes.tvqRate.toString());
+          if (data.taxes.tpsNumber !== undefined) setTpsNumber(data.taxes.tpsNumber);
+          if (data.taxes.tvqNumber !== undefined) setTvqNumber(data.taxes.tvqNumber);
         }
       }
     });
@@ -78,6 +94,34 @@ export default function AboutPage() {
     setSoldDays(days);
     await update(ref(database, SETTINGS_PATH), { vitrineSoldDays: days });
   };
+
+  // ---- Tax Handlers ----
+  const handleTaxToggle = async (enabled) => {
+    setTaxEnabled(enabled);
+    await update(ref(database, `${SETTINGS_PATH}/taxes`), {
+      enabled,
+      tpsRate: parseFloat(tpsRate) || 5,
+      tvqRate: parseFloat(tvqRate) || 9.975,
+      tpsNumber,
+      tvqNumber
+    });
+  };
+
+  const handleSaveTaxSettings = async () => {
+    await update(ref(database, `${SETTINGS_PATH}/taxes`), {
+      enabled: taxEnabled,
+      tpsRate: parseFloat(tpsRate) || 5,
+      tvqRate: parseFloat(tvqRate) || 9.975,
+      tpsNumber: tpsNumber.trim(),
+      tvqNumber: tvqNumber.trim()
+    });
+  };
+
+  // Aperçu calcul taxes
+  const taxPreviewPrice = 50;
+  const tpsAmount = Math.round(taxPreviewPrice * (parseFloat(tpsRate) || 0)) / 100;
+  const tvqAmount = Math.round(taxPreviewPrice * (parseFloat(tvqRate) || 0) * 100) / 10000;
+  const totalWithTax = taxPreviewPrice + tpsAmount + tvqAmount;
 
   // ---- Subscription Info ----
   const currentPlan = PLANS[subscription?.plan || 'free'];
@@ -276,6 +320,193 @@ export default function AboutPage() {
               <button className="btn btn-small btn-secondary btn-full">
                 Gérer mon abonnement
               </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ======= TAXES DE VENTE ======= */}
+      <div className="about-card" style={{ marginBottom: '12px' }}>
+        <h4>🧾 Taxes de vente</h4>
+
+        <div className="tax-section">
+          {/* Toggle principal */}
+          <div className="tax-toggle-row">
+            <label className="tax-toggle-label">
+              <input
+                type="checkbox"
+                checked={taxEnabled}
+                onChange={(e) => handleTaxToggle(e.target.checked)}
+              />
+              <span className="tax-toggle-text">Je perçois les taxes de vente</span>
+            </label>
+          </div>
+
+          {taxEnabled && (
+            <>
+              {/* Taux */}
+              <div className="store-form-row" style={{ marginTop: '12px' }}>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label">TPS (%)</label>
+                  <input
+                    type="number"
+                    value={tpsRate}
+                    onChange={(e) => setTpsRate(e.target.value)}
+                    onBlur={handleSaveTaxSettings}
+                    className="form-input"
+                    step="0.001"
+                    min="0"
+                    max="20"
+                    inputMode="decimal"
+                  />
+                </div>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label">TVQ (%)</label>
+                  <input
+                    type="number"
+                    value={tvqRate}
+                    onChange={(e) => setTvqRate(e.target.value)}
+                    onBlur={handleSaveTaxSettings}
+                    className="form-input"
+                    step="0.001"
+                    min="0"
+                    max="20"
+                    inputMode="decimal"
+                  />
+                </div>
+              </div>
+
+              {/* Numéros de taxes (optionnels) */}
+              <div className="form-group" style={{ marginTop: '8px' }}>
+                <label className="form-label">Numéro TPS (optionnel)</label>
+                <input
+                  type="text"
+                  value={tpsNumber}
+                  onChange={(e) => setTpsNumber(e.target.value)}
+                  onBlur={handleSaveTaxSettings}
+                  className="form-input"
+                  placeholder="Ex: 123456789RT0001"
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Numéro TVQ (optionnel)</label>
+                <input
+                  type="text"
+                  value={tvqNumber}
+                  onChange={(e) => setTvqNumber(e.target.value)}
+                  onBlur={handleSaveTaxSettings}
+                  className="form-input"
+                  placeholder="Ex: 1234567890TQ0001"
+                />
+              </div>
+
+              {/* Aperçu */}
+              <div className="tax-preview">
+                <p className="tax-preview-title">Aperçu sur un article à 50.00 $ :</p>
+                <div className="tax-preview-row">
+                  <span>Prix</span>
+                  <span>50.00 $</span>
+                </div>
+                <div className="tax-preview-row">
+                  <span>TPS ({tpsRate}%)</span>
+                  <span>{tpsAmount.toFixed(2)} $</span>
+                </div>
+                <div className="tax-preview-row">
+                  <span>TVQ ({tvqRate}%)</span>
+                  <span>{tvqAmount.toFixed(2)} $</span>
+                </div>
+                <div className="tax-preview-row tax-preview-total">
+                  <span>Total</span>
+                  <span>{totalWithTax.toFixed(2)} $</span>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Bouton info */}
+          <button
+            className="btn btn-small btn-secondary btn-full"
+            style={{ marginTop: '12px' }}
+            onClick={() => setShowTaxInfo(!showTaxInfo)}
+          >
+            {showTaxInfo ? '▲ Masquer' : '📋 Ce que vous devez savoir sur les taxes'}
+          </button>
+
+          {showTaxInfo && (
+            <div className="tax-info-section">
+              <h5>📋 Taxes de vente — Ce que vous devez savoir</h5>
+
+              <div className="tax-info-block">
+                <p className="tax-info-subtitle">Suis-je obligé de percevoir les taxes ?</p>
+                <p>
+                  Au Canada, si vos ventes totales sont inférieures à 30 000 $ sur quatre trimestres
+                  civils consécutifs, vous êtes considéré « petit fournisseur » et vous n'êtes
+                  <strong> pas obligé</strong> de vous inscrire aux taxes (TPS/TVH au fédéral et
+                  TVQ au Québec).
+                </p>
+              </div>
+
+              <div className="tax-info-block">
+                <p className="tax-info-subtitle">Avantages de s'inscrire volontairement</p>
+                <p>
+                  Même sous le seuil de 30 000 $, l'inscription volontaire peut être avantageuse.
+                  Vous pouvez réclamer des crédits de taxe sur les intrants (CTI) pour récupérer
+                  la TPS et la TVQ payées sur vos achats de matériaux, fournitures, outils et
+                  équipement. Pour certains artisans, ces remboursements peuvent être significatifs.
+                </p>
+              </div>
+
+              <div className="tax-info-block">
+                <p className="tax-info-subtitle">Inconvénients</p>
+                <p>
+                  Si vous vous inscrivez, vous devez percevoir les taxes sur toutes vos ventes,
+                  produire des déclarations de taxes régulièrement, et remettre les montants perçus
+                  aux gouvernements. Cela ajoute de la comptabilité et de l'administration.
+                  Vos prix peuvent aussi paraître plus élevés face à des artisans non inscrits.
+                </p>
+              </div>
+
+              <div className="tax-info-block">
+                <p className="tax-info-subtitle">Si vous dépassez 30 000 $</p>
+                <p>
+                  Dès que vos ventes dépassent 30 000 $ au cours d'un seul trimestre civil ou sur
+                  quatre trimestres consécutifs, vous devez vous inscrire dans les 29 jours suivants
+                  et commencer à percevoir les taxes. Il est important de surveiller vos ventes
+                  pour ne pas manquer ce seuil.
+                </p>
+              </div>
+
+              <div className="tax-info-block">
+                <p className="tax-info-subtitle">Taux au Québec</p>
+                <p>
+                  TPS (fédéral) : 5 % — TVQ (Québec) : 9,975 %. La TVQ se calcule sur le prix
+                  avant TPS (et non sur le prix + TPS). Le taux combiné effectif est d'environ
+                  14,975 %.
+                </p>
+              </div>
+
+              <div className="tax-info-block">
+                <p className="tax-info-subtitle">Ressources officielles</p>
+                <p>
+                  🔗 <a href="https://www.canada.ca/fr/agence-revenu/services/taxe/entreprises/sujets/tps-tvh-entreprises/sinscrire-tps-tvh.html" target="_blank" rel="noopener noreferrer">
+                    Agence du revenu du Canada — Inscription TPS/TVH
+                  </a>
+                  <br />
+                  🔗 <a href="https://www.revenuquebec.ca/fr/entreprises/taxes/tpstvh-et-tvq/inscription-aux-fichiers-de-la-tps-et-de-la-tvq/" target="_blank" rel="noopener noreferrer">
+                    Revenu Québec — Inscription TPS et TVQ
+                  </a>
+                </p>
+              </div>
+
+              <div className="tax-info-disclaimer">
+                <p>
+                  ⚠️ <strong>Avis important :</strong> Cette information est fournie à titre indicatif
+                  seulement et ne constitue pas un avis fiscal ou juridique. Chaque situation est
+                  unique. Consultez un comptable ou un professionnel qualifié pour déterminer ce qui
+                  convient à votre situation. Cette application est un outil de gestion d'inventaire
+                  et n'assume aucune responsabilité en matière de conformité fiscale.
+                </p>
+              </div>
             </div>
           )}
         </div>
@@ -530,10 +761,10 @@ export default function AboutPage() {
       {/* ======= À PROPOS ======= */}
       <div className="about-card">
         <div className="about-logo">
-          <img src="/pwa-192x192.png" alt="Stock du Loft" />
+          <img src="/pwa-192x192.png" alt="Vitrine Artisan" />
         </div>
-        <h3>✂️ Stock du Loft</h3>
-        <p className="about-version">Version 1.2</p>
+        <h3>✂️ Vitrine Artisan</h3>
+        <p className="about-version">Version 1.3</p>
         <p className="about-description">
           Application de gestion d'inventaire conçue pour les artisans et créateurs.
           Gérez vos articles, suivez vos consignes et enregistrez vos ventes en toute simplicité.

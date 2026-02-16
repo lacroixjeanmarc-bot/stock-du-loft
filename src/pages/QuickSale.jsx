@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { ref, onValue } from 'firebase/database';
+import { database } from '../firebase';
 import { getItemByUniqueId, sellItem, getStore } from '../services/inventoryService';
 import { useAuth } from '../hooks/useAuth';
 
@@ -22,9 +24,42 @@ export default function QuickSale() {
   const [isGift, setIsGift] = useState(false);
   const [giftNote, setGiftNote] = useState('');
 
+  // Tax settings
+  const [taxSettings, setTaxSettings] = useState(null);
+
+  useEffect(() => {
+    const settingsRef = ref(database, 'stockduloft/settings/taxes');
+    const unsub = onValue(settingsRef, (snap) => {
+      if (snap.exists()) {
+        setTaxSettings(snap.val());
+      } else {
+        setTaxSettings({ enabled: false });
+      }
+    });
+    return unsub;
+  }, []);
+
+  const taxEnabled = taxSettings?.enabled || false;
+  const tpsRate = taxSettings?.tpsRate || 5;
+  const tvqRate = taxSettings?.tvqRate || 9.975;
+
+  // Calcul taxes en temps réel
+  const getTaxPreview = () => {
+    if (!taxEnabled || isGift) return null;
+    const price = parseFloat(salePrice) || 0;
+    if (price <= 0) return null;
+    const tpsAmount = Math.round(price * tpsRate) / 100;
+    const tvqAmount = Math.round(price * tvqRate * 100) / 10000;
+    const totalWithTax = Math.round((price + tpsAmount + tvqAmount) * 100) / 100;
+    return { tpsAmount, tvqAmount, totalWithTax };
+  };
+
+  const taxPreview = getTaxPreview();
+
   const handleSearch = async (e) => {
     e?.preventDefault();
     if (!searchId.trim()) return;
+
     setSearching(true);
     setError('');
     setSuccess('');
@@ -33,14 +68,17 @@ export default function QuickSale() {
 
     try {
       const item = await getItemByUniqueId(searchId);
+
       if (!item) {
         setError(`Aucun item trouvé avec le numéro "${searchId.toUpperCase()}"`);
         return;
       }
+
       if (item.status === 'sold') {
         setError(`Cet item est déjà vendu (${item.saleDate} par ${item.sellerName})`);
         return;
       }
+
       setFoundItem(item);
       setSalePrice(item.price?.toFixed(2) || '');
 
@@ -70,20 +108,47 @@ export default function QuickSale() {
 
   const handleSell = async () => {
     if (!foundItem || !sellerName.trim()) return;
+
     setSelling(true);
     setError('');
 
     try {
       const finalPrice = isGift ? 0 : (parseFloat(salePrice) || foundItem.price);
-      const result = await sellItem(foundItem.id, sellerName, saleDate, finalPrice, marketName, isGift, giftNote);
+
+      // Calculer taxes pour enregistrer avec la vente
+      let taxData = null;
+      if (taxEnabled && !isGift && finalPrice > 0) {
+        const tps = Math.round(finalPrice * tpsRate) / 100;
+        const tvq = Math.round(finalPrice * tvqRate * 100) / 10000;
+        taxData = {
+          tpsRate,
+          tvqRate,
+          tpsAmount: tps,
+          tvqAmount: tvq,
+          totalWithTax: Math.round((finalPrice + tps + tvq) * 100) / 100
+        };
+      }
+
+      const result = await sellItem(foundItem.id, sellerName, saleDate, finalPrice, marketName, isGift, giftNote, taxData);
 
       let msg;
       if (isGift) {
         msg = `✓ ${foundItem.uniqueId} donné en cadeau${giftNote ? ` — ${giftNote}` : ''}`;
       } else if (result.commissionAmount > 0) {
-        msg = `✓ ${foundItem.uniqueId} vendu pour ${formatPrice(finalPrice)} $\n💸 Commission ${foundItem.consignmentStore}: -${formatPrice(result.commissionAmount)} $\n✅ Revenu net: ${formatPrice(result.netRevenue)} $`;
+        msg = `✓ ${foundItem.uniqueId} vendu pour ${formatPrice(finalPrice)} $`;
+        if (taxData) {
+          msg += `\n🧾 TPS: ${formatPrice(taxData.tpsAmount)} $ + TVQ: ${formatPrice(taxData.tvqAmount)} $ = Total: ${formatPrice(taxData.totalWithTax)} $`;
+        }
+        msg += `\n💸 Commission ${foundItem.consignmentStore}: -${formatPrice(result.commissionAmount)} $`;
+        msg += `\n✅ Revenu net: ${formatPrice(result.netRevenue)} $`;
       } else {
-        msg = `✓ ${foundItem.uniqueId} vendu pour ${formatPrice(finalPrice)} $${marketName ? ` au ${marketName}` : ''}`;
+        msg = `✓ ${foundItem.uniqueId} vendu pour ${formatPrice(finalPrice)} $`;
+        if (taxData) {
+          msg += `\n🧾 TPS: ${formatPrice(taxData.tpsAmount)} $ + TVQ: ${formatPrice(taxData.tvqAmount)} $\n💰 Total avec taxes: ${formatPrice(taxData.totalWithTax)} $`;
+        }
+        if (marketName) {
+          msg += `${taxData ? '' : '\n'}${taxData ? ' — ' : ' au '}${marketName}`;
+        }
       }
 
       setSuccess(msg);
@@ -244,6 +309,28 @@ export default function QuickSale() {
               </div>
             )}
 
+            {/* Aperçu taxes */}
+            {taxPreview && (
+              <div className="sale-tax-preview">
+                <div className="tax-calc-row">
+                  <span>Prix</span>
+                  <span>{formatPrice(parseFloat(salePrice))} $</span>
+                </div>
+                <div className="tax-calc-row">
+                  <span>TPS ({tpsRate}%)</span>
+                  <span>{formatPrice(taxPreview.tpsAmount)} $</span>
+                </div>
+                <div className="tax-calc-row">
+                  <span>TVQ ({tvqRate}%)</span>
+                  <span>{formatPrice(taxPreview.tvqAmount)} $</span>
+                </div>
+                <div className="tax-calc-row tax-calc-total">
+                  <span>🧾 Total à encaisser</span>
+                  <span>{formatPrice(taxPreview.totalWithTax)} $</span>
+                </div>
+              </div>
+            )}
+
             {/* Aperçu commission si article en consigne */}
             {commissionPreview && (
               <div className="sale-commission-preview">
@@ -256,7 +343,7 @@ export default function QuickSale() {
                   <span>-{formatPrice(commissionPreview.commissionAmount)} $</span>
                 </div>
                 <div className="commission-row commission-total">
-                  <span>Revenu net pour Josée</span>
+                  <span>Revenu net pour vous</span>
                   <span>{formatPrice(commissionPreview.netRevenue)} $</span>
                 </div>
               </div>
@@ -307,9 +394,11 @@ export default function QuickSale() {
                   ? 'En cours...'
                   : isGift
                     ? '🎁 Confirmer le cadeau'
-                    : commissionPreview
-                      ? `Confirmer — Net: ${formatPrice(commissionPreview.netRevenue)} $`
-                      : `Confirmer la vente — ${formatPrice(parseFloat(salePrice || 0))} $`
+                    : taxPreview
+                      ? `Confirmer — Total: ${formatPrice(taxPreview.totalWithTax)} $`
+                      : commissionPreview
+                        ? `Confirmer — Net: ${formatPrice(commissionPreview.netRevenue)} $`
+                        : `Confirmer la vente — ${formatPrice(parseFloat(salePrice || 0))} $`
                 }
               </button>
               <button className="btn btn-secondary btn-full" onClick={resetSearch}>

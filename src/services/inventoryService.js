@@ -5,7 +5,6 @@ import { compressImage, compressThumbnail } from './imageService';
 const ITEMS_PATH = 'stockduloft/items';
 const PHOTOS_PATH = 'stockduloft/photos';
 const STORES_PATH = 'stockduloft/stores';
-
 const MAX_EXTRA_PHOTOS = 4;
 
 // ==========================================
@@ -23,7 +22,6 @@ export async function getAllItemPhotos(itemId) {
   const photoRef = ref(database, `${PHOTOS_PATH}/${itemId}`);
   const snapshot = await get(photoRef);
   if (!snapshot.exists()) return [];
-
   const data = snapshot.val();
   const photos = [];
   if (data.photoBase64) photos.push(data.photoBase64);
@@ -50,6 +48,7 @@ export async function addExtraPhoto(itemId, photoFile) {
   const currentCount = countPhotos(data) + 1;
   const itemRef = ref(database, `${ITEMS_PATH}/${itemId}`);
   await update(itemRef, { photoCount: currentCount, updatedAt: Date.now() });
+
   return nextSlot;
 }
 
@@ -61,6 +60,7 @@ export async function deleteExtraPhoto(itemId, index) {
   const snapshot = await get(photoRef);
   const data = snapshot.exists() ? snapshot.val() : {};
   const count = countPhotos(data);
+
   const itemRef = ref(database, `${ITEMS_PATH}/${itemId}`);
   await update(itemRef, { photoCount: count, updatedAt: Date.now() });
 }
@@ -78,9 +78,6 @@ function countPhotos(photoData) {
 // MAGASINS (STORES)
 // ==========================================
 
-/**
- * Écoute les magasins en temps réel.
- */
 export function subscribeToStores(callback) {
   const storesRef = ref(database, STORES_PATH);
   const unsubscribe = onValue(storesRef, (snapshot) => {
@@ -96,9 +93,6 @@ export function subscribeToStores(callback) {
   return unsubscribe;
 }
 
-/**
- * Récupère tous les magasins (one-shot).
- */
 export async function getStores() {
   const storesRef = ref(database, STORES_PATH);
   const snapshot = await get(storesRef);
@@ -112,9 +106,6 @@ export async function getStores() {
   return stores;
 }
 
-/**
- * Récupère un magasin par ID.
- */
 export async function getStore(storeId) {
   const storeRef = ref(database, `${STORES_PATH}/${storeId}`);
   const snapshot = await get(storeRef);
@@ -122,9 +113,6 @@ export async function getStore(storeId) {
   return { id: storeId, ...snapshot.val() };
 }
 
-/**
- * Ajoute un nouveau magasin.
- */
 export async function addStore({ name, commissionPercent, locationFee }) {
   const storeData = {
     name: name.trim(),
@@ -139,17 +127,11 @@ export async function addStore({ name, commissionPercent, locationFee }) {
   return { id: newRef.key, ...storeData };
 }
 
-/**
- * Met à jour un magasin.
- */
 export async function updateStore(storeId, updates) {
   const storeRef = ref(database, `${STORES_PATH}/${storeId}`);
   await update(storeRef, updates);
 }
 
-/**
- * Supprime un magasin.
- */
 export async function deleteStore(storeId) {
   const storeRef = ref(database, `${STORES_PATH}/${storeId}`);
   await remove(storeRef);
@@ -218,7 +200,6 @@ export async function getItemByUniqueId(uniqueId) {
 
   const searchId = uniqueId.toUpperCase().trim();
   let found = null;
-
   snapshot.forEach((child) => {
     const data = child.val();
     if (data.uniqueId === searchId) {
@@ -237,7 +218,6 @@ export async function getNextUniqueId(prefix = 'ADL') {
   const itemsRef = ref(database, ITEMS_PATH);
   const snapshot = await get(itemsRef);
   let maxNum = 0;
-
   if (snapshot.exists()) {
     snapshot.forEach((child) => {
       const data = child.val();
@@ -249,20 +229,20 @@ export async function getNextUniqueId(prefix = 'ADL') {
       }
     });
   }
-
   const next = maxNum + 1;
   return `${prefix}-${String(next).padStart(3, '0')}`;
 }
 
 // ==========================================
-// VENTE (avec support commission consigne)
+// VENTE (avec support commission + taxes)
 // ==========================================
 
 /**
  * Marque un item comme vendu.
  * Si l'item était en consigne, calcule la commission.
+ * Si taxData est fourni, stocke les infos de taxes.
  */
-export async function sellItem(itemId, sellerName, saleDate = null, salePrice = null, marketName = '', isGift = false, giftNote = '') {
+export async function sellItem(itemId, sellerName, saleDate = null, salePrice = null, marketName = '', isGift = false, giftNote = '', taxData = null) {
   const itemRef = ref(database, `${ITEMS_PATH}/${itemId}`);
   const itemSnap = await get(itemRef);
   const itemData = itemSnap.exists() ? itemSnap.val() : {};
@@ -279,6 +259,23 @@ export async function sellItem(itemId, sellerName, saleDate = null, salePrice = 
     giftNote: isGift ? giftNote.trim() : '',
     updatedAt: Date.now()
   };
+
+  // Stocker les taxes si fournies
+  if (taxData && !isGift) {
+    updates.taxEnabled = true;
+    updates.tpsRate = taxData.tpsRate;
+    updates.tvqRate = taxData.tvqRate;
+    updates.tpsAmount = taxData.tpsAmount;
+    updates.tvqAmount = taxData.tvqAmount;
+    updates.totalWithTax = taxData.totalWithTax;
+  } else {
+    updates.taxEnabled = false;
+    updates.tpsRate = null;
+    updates.tvqRate = null;
+    updates.tpsAmount = null;
+    updates.tvqAmount = null;
+    updates.totalWithTax = null;
+  }
 
   // Calculer la commission si l'item était en consigne
   if (itemData.status === 'consignment' && itemData.consignmentStoreId && !isGift) {
@@ -301,7 +298,6 @@ export async function sellItem(itemId, sellerName, saleDate = null, salePrice = 
 
 /**
  * Met un item en consigne chez un marchand.
- * Accepte un storeId pour lier au magasin sauvegardé.
  */
 export async function consignItem(itemId, storeName, consignmentDate = null, storeId = '') {
   const itemRef = ref(database, `${ITEMS_PATH}/${itemId}`);
@@ -333,6 +329,12 @@ export async function returnToInventory(itemId) {
     commissionPercent: null,
     commissionAmount: null,
     netRevenue: null,
+    taxEnabled: null,
+    tpsRate: null,
+    tvqRate: null,
+    tpsAmount: null,
+    tvqAmount: null,
+    totalWithTax: null,
     updatedAt: Date.now()
   });
 }

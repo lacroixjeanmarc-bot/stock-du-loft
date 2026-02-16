@@ -2677,3 +2677,153 @@ body {
   flex: 0;
   min-width: 50px;
 }
+
+/* ===========================================
+   TAXES DE VENTE
+   =========================================== */
+
+.tax-section {
+  margin-top: 10px;
+}
+
+.tax-toggle-row {
+  margin-bottom: 8px;
+}
+
+.tax-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--text-primary, #e8e8e8);
+}
+
+.tax-toggle-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent, #e8a87c);
+  cursor: pointer;
+}
+
+.tax-toggle-text {
+  font-weight: 600;
+}
+
+/* Aperçu calcul taxes */
+.tax-preview {
+  margin-top: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--radius-sm, 8px);
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.tax-preview-title {
+  font-size: 0.75rem;
+  color: var(--text-muted, #6b7394);
+  margin: 0 0 8px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.tax-preview-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #a0a8c0);
+}
+
+.tax-preview-row.tax-preview-total {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 4px;
+  padding-top: 6px;
+  font-weight: 700;
+  color: var(--text-primary, #e8e8e8);
+}
+
+/* Tax info section */
+.tax-info-section {
+  margin-top: 14px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.tax-info-section h5 {
+  margin: 0 0 14px 0;
+  font-size: 0.95rem;
+  color: var(--text-primary, #e8e8e8);
+}
+
+.tax-info-block {
+  margin-bottom: 14px;
+}
+
+.tax-info-subtitle {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--accent, #e8a87c);
+  margin: 0 0 4px 0;
+}
+
+.tax-info-block p {
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--text-secondary, #a0a8c0);
+  margin: 0;
+}
+
+.tax-info-block a {
+  color: var(--accent, #e8a87c);
+  text-decoration: none;
+}
+
+.tax-info-block a:hover {
+  text-decoration: underline;
+}
+
+.tax-info-disclaimer {
+  margin-top: 14px;
+  padding: 10px 12px;
+  background: rgba(243, 156, 18, 0.08);
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid rgba(243, 156, 18, 0.2);
+}
+
+.tax-info-disclaimer p {
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-secondary, #a0a8c0);
+  margin: 0;
+}
+
+/* Tax preview dans QuickSale */
+.sale-tax-preview {
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: var(--radius-sm, 8px);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.tax-calc-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #a0a8c0);
+}
+
+.tax-calc-row.tax-calc-total {
+  border-top: 1px solid rgba(139, 92, 246, 0.2);
+  margin-top: 4px;
+  padding-top: 6px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #8b5cf6;
+}
