@@ -488,7 +488,7 @@ export default function AboutPage() {
               <div className="tax-info-block">
                 <p className="tax-info-subtitle">Ressources officielles</p>
                 <p>
-                  🔗 <a href="https://www.canada.ca/fr/agence-revenu/services/taxe/entreprises/sujets/tps-tvh-entreprises/sinscrire-tps-tvh.html" target="_blank" rel="noopener noreferrer">
+                  🔗 <a href="https://www.canada.ca/fr/agence-revenu/services/impot/entreprises/sujets/tps-tvh-entreprises/compte-tps-tvh/inscrire-compte.html" target="_blank" rel="noopener noreferrer">
                     Agence du revenu du Canada — Inscription TPS/TVH
                   </a>
                   <br />
