@@ -24,14 +24,18 @@ const STATUS_COLORS = {
   sold: '#e74c3c'
 };
 
+function formatPrice(price) {
+  return price?.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+}
+
 export default function InventoryList() {
   const [items, setItems] = useState([]);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [expandedItem, setExpandedItem] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [loadedPhotos, setLoadedPhotos] = useState({}); // { itemId: [photo0, photo1, ...] }
-  const [activePhotoIndex, setActivePhotoIndex] = useState({}); // { itemId: index }
+  const [loadedPhotos, setLoadedPhotos] = useState({});
+  const [activePhotoIndex, setActivePhotoIndex] = useState({});
   const [editingItem, setEditingItem] = useState(null);
   const [editForm, setEditForm] = useState({ description: '', longDescription: '', price: '', category: '' });
   const [addingPhoto, setAddingPhoto] = useState(false);
@@ -45,7 +49,6 @@ export default function InventoryList() {
     return unsubscribe;
   }, []);
 
-  // Charger toutes les photos quand on ouvre un item
   const handleExpand = async (item) => {
     if (expandedItem === item.id) {
       setExpandedItem(null);
@@ -54,11 +57,9 @@ export default function InventoryList() {
     setExpandedItem(item.id);
     setActivePhotoIndex((prev) => ({ ...prev, [item.id]: 0 }));
 
-    // Charger toutes les photos si pas déjà en cache
     if (!loadedPhotos[item.id]) {
       if (item.hasPhoto || item.photoBase64) {
         const photos = await getAllItemPhotos(item.id);
-        // Fallback: ancien format avec photo dans l'item
         if (photos.length === 0 && item.photoBase64) {
           setLoadedPhotos((prev) => ({ ...prev, [item.id]: [item.photoBase64] }));
         } else {
@@ -68,7 +69,6 @@ export default function InventoryList() {
     }
   };
 
-  // Ajouter une photo supplémentaire
   const handleAddExtraPhoto = async (item, e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -79,7 +79,6 @@ export default function InventoryList() {
       if (result === null) {
         alert('Maximum de 5 photos atteint pour cet article.');
       } else {
-        // Recharger les photos
         const photos = await getAllItemPhotos(item.id);
         setLoadedPhotos((prev) => ({ ...prev, [item.id]: photos }));
       }
@@ -92,7 +91,6 @@ export default function InventoryList() {
     }
   };
 
-  // Supprimer une photo extra
   const handleDeleteExtraPhoto = async (item, photoIndex) => {
     if (photoIndex === 0) {
       alert('La photo principale ne peut pas être supprimée ici. Supprimez l\'article pour retirer la photo principale.');
@@ -102,7 +100,6 @@ export default function InventoryList() {
 
     try {
       await deleteExtraPhoto(item.id, photoIndex);
-      // Recharger les photos
       const photos = await getAllItemPhotos(item.id);
       setLoadedPhotos((prev) => ({ ...prev, [item.id]: photos }));
       setActivePhotoIndex((prev) => ({ ...prev, [item.id]: 0 }));
@@ -111,7 +108,6 @@ export default function InventoryList() {
     }
   };
 
-  // Filtrer les items
   const filteredItems = items.filter((item) => {
     const matchesFilter = filter === 'all' || item.status === filter;
     const matchesSearch =
@@ -121,7 +117,6 @@ export default function InventoryList() {
     return matchesFilter && matchesSearch;
   });
 
-  // Compteurs
   const counts = {
     all: items.length,
     inventory: items.filter((i) => i.status === 'inventory').length,
@@ -191,7 +186,6 @@ export default function InventoryList() {
 
   return (
     <div className="page inventory-page">
-      {/* Barre de recherche */}
       <div className="search-bar">
         <input
           type="text"
@@ -205,7 +199,6 @@ export default function InventoryList() {
         )}
       </div>
 
-      {/* Filtres par statut */}
       <div className="status-filters">
         {Object.entries(STATUS_LABELS).map(([key, label]) => (
           <button
@@ -219,7 +212,6 @@ export default function InventoryList() {
         ))}
       </div>
 
-      {/* Liste des items */}
       {filteredItems.length === 0 ? (
         <div className="empty-state">
           <p className="empty-icon">📭</p>
@@ -234,7 +226,6 @@ export default function InventoryList() {
               onClick={() => handleExpand(item)}
             >
               <div className="item-row">
-                {/* Miniature ou placeholder */}
                 <div className="item-photo">
                   {item.thumbnail ? (
                     <img
@@ -247,13 +238,11 @@ export default function InventoryList() {
                   ) : (
                     <div className="photo-placeholder">📷</div>
                   )}
-                  {/* Badge nombre de photos */}
                   {(item.photoCount > 1) && (
                     <span className="photo-count-badge">{item.photoCount}</span>
                   )}
                 </div>
 
-                {/* Info */}
                 <div className="item-info">
                   <div className="item-id-row">
                     <span className="item-unique-id">#{item.uniqueId}</span>
@@ -266,7 +255,7 @@ export default function InventoryList() {
                   </div>
                   <p className="item-description">{item.description}</p>
                   <div className="item-meta">
-                    <span className="item-price">{item.price?.toFixed(2)} $</span>
+                    <span className="item-price">{formatPrice(item.price)} $</span>
                     {item.itemDate && (
                       <span className="item-date">🧵 {item.itemDate}</span>
                     )}
@@ -278,7 +267,7 @@ export default function InventoryList() {
                         {item.isGift
                           ? <>🎁 Cadeau{item.giftNote ? ` — ${item.giftNote}` : ''} · </>
                           : item.salePrice && item.salePrice !== item.price
-                            ? <><s>{item.price?.toFixed(2)} $</s> → {item.salePrice?.toFixed(2)} $ · </>
+                            ? <><s>{formatPrice(item.price)} $</s> → {formatPrice(item.salePrice)} $ · </>
                             : ''
                         }
                         {item.saleDate} — {item.sellerName}
@@ -289,20 +278,16 @@ export default function InventoryList() {
                 </div>
               </div>
 
-              {/* Expanded: galerie photos + actions */}
               {expandedItem === item.id && (
                 <div onClick={(e) => e.stopPropagation()}>
-                  {/* Galerie de photos */}
                   {loadedPhotos[item.id] && loadedPhotos[item.id].length > 0 && (
                     <div className="photo-gallery">
-                      {/* Photo principale (grande) */}
                       <div className="gallery-main">
                         <img
                           src={loadedPhotos[item.id][activePhotoIndex[item.id] || 0]}
                           alt={item.description}
                         />
                       </div>
-                      {/* Thumbnails en dessous */}
                       {loadedPhotos[item.id].length > 1 && (
                         <div className="gallery-thumbs">
                           {loadedPhotos[item.id].map((photo, idx) => (
@@ -312,7 +297,6 @@ export default function InventoryList() {
                               onClick={() => setActivePhotoIndex((prev) => ({ ...prev, [item.id]: idx }))}
                             >
                               <img src={photo} alt={`Photo ${idx + 1}`} />
-                              {/* Bouton supprimer pour les extras */}
                               {idx > 0 && editingItem === item.id && (
                                 <button
                                   className="gallery-thumb-delete"
@@ -335,7 +319,6 @@ export default function InventoryList() {
                     </div>
                   )}
 
-                  {/* Description longue (lecture seule si pas en mode édition) */}
                   {item.longDescription && editingItem !== item.id && (
                     <div className="item-long-description">
                       <p>{item.longDescription}</p>
@@ -343,7 +326,6 @@ export default function InventoryList() {
                   )}
 
                   <div className="item-actions">
-                    {/* Formulaire d'édition */}
                     {editingItem === item.id ? (
                       <div className="item-edit-form">
                         <div className="form-group">
@@ -395,7 +377,6 @@ export default function InventoryList() {
                           />
                         </div>
 
-                        {/* Ajout de photos supplémentaires */}
                         <div className="form-group">
                           <label className="form-label">
                             📷 Photos ({loadedPhotos[item.id]?.length || (item.hasPhoto ? 1 : 0)}/5)

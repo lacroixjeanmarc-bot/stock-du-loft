@@ -7,6 +7,10 @@ const PHOTOS_PATH = 'stockduloft/photos';
 const SETTINGS_PATH = 'stockduloft/settings';
 const MAX_EXTRA_PHOTOS = 4;
 
+function formatPrice(price) {
+  return price?.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+}
+
 function isRecentlySold(item, days) {
   if (item.status !== 'sold' || !item.saleDate) return false;
   const saleDate = new Date(item.saleDate);
@@ -15,9 +19,6 @@ function isRecentlySold(item, days) {
   return diff <= days;
 }
 
-/**
- * Extrait toutes les photos d'un objet photo Firebase.
- */
 function extractPhotos(photoData) {
   const photos = [];
   if (!photoData) return photos;
@@ -33,11 +34,10 @@ export default function Vitrine() {
   const [loading, setLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [selectedItem, setSelectedItem] = useState(null);
-  const [photos, setPhotos] = useState({}); // { itemId: [photo0, photo1, ...] }
-  const [activePhoto, setActivePhoto] = useState({}); // { itemId: index }
+  const [photos, setPhotos] = useState({});
+  const [activePhoto, setActivePhoto] = useState({});
   const [soldDays, setSoldDays] = useState(7);
 
-  // Charger le paramètre de durée d'affichage des ventes
   useEffect(() => {
     const settingsRef = ref(database, SETTINGS_PATH);
     const unsub = onValue(settingsRef, (snap) => {
@@ -73,7 +73,6 @@ export default function Vitrine() {
       setItems(data);
       setLoading(false);
 
-      // Charger les photos de tous les items visibles
       data.forEach(async (item) => {
         if (item.hasPhoto && !item.photoBase64) {
           try {
@@ -93,7 +92,6 @@ export default function Vitrine() {
     return unsubscribe;
   }, [soldDays]);
 
-  // Catégories uniques
   const categories = [...new Set(items.map((i) => i.category).filter(Boolean))].sort();
 
   const filteredItems =
@@ -110,7 +108,6 @@ export default function Vitrine() {
     }
   };
 
-  // Obtenir les photos d'un item (gère ancien et nouveau format)
   const getItemPhotos = (item) => {
     if (photos[item.id] && photos[item.id].length > 0) return photos[item.id];
     if (item.photoBase64) return [item.photoBase64];
@@ -130,7 +127,6 @@ export default function Vitrine() {
 
   return (
     <div className="vitrine">
-      {/* Header */}
       <header className="vitrine-header">
         <img src="/pwa-192x192.png" alt="Logo" className="vitrine-logo" />
         <div>
@@ -143,7 +139,6 @@ export default function Vitrine() {
         </div>
       </header>
 
-      {/* Filtres catégories */}
       {categories.length > 0 && (
         <div className="vitrine-filters">
           <button
@@ -164,7 +159,6 @@ export default function Vitrine() {
         </div>
       )}
 
-      {/* Grille d'items */}
       {filteredItems.length === 0 ? (
         <div className="vitrine-empty">
           <p>🏷️</p>
@@ -183,7 +177,6 @@ export default function Vitrine() {
                 className={`vitrine-card ${isExpanded ? 'expanded' : ''}`}
                 onClick={() => handleItemClick(item.id)}
               >
-                {/* === VUE COMPACTE (carte dans la grille) === */}
                 {!isExpanded && (
                   <>
                     <div className="vitrine-card-photo">
@@ -209,7 +202,7 @@ export default function Vitrine() {
                       <p className="vitrine-card-desc">
                         {item.description || 'Sans description'}
                       </p>
-                      <p className="vitrine-card-price">{item.price?.toFixed(2)} $</p>
+                      <p className="vitrine-card-price">{formatPrice(item.price)} $</p>
                       {item.category && (
                         <span className="vitrine-card-category">{item.category}</span>
                       )}
@@ -217,10 +210,8 @@ export default function Vitrine() {
                   </>
                 )}
 
-                {/* === VUE DÉTAILLÉE (expanded) — style Amazon === */}
                 {isExpanded && (
                   <div className="vitrine-detail" onClick={(e) => e.stopPropagation()}>
-                    {/* Bouton fermer */}
                     <button
                       className="vitrine-detail-close"
                       onClick={() => setSelectedItem(null)}
@@ -228,10 +219,8 @@ export default function Vitrine() {
                       ✕ Fermer
                     </button>
 
-                    {/* Galerie photos */}
                     {itemPhotos.length > 0 && (
                       <div className="vitrine-gallery">
-                        {/* Photo principale en grand */}
                         <div className="vitrine-gallery-main">
                           <img
                             src={itemPhotos[currentPhotoIdx]}
@@ -244,7 +233,6 @@ export default function Vitrine() {
                           )}
                         </div>
 
-                        {/* Thumbnails sélectionnables */}
                         {itemPhotos.length > 1 && (
                           <div className="vitrine-gallery-thumbs">
                             {itemPhotos.map((photo, idx) => (
@@ -264,13 +252,12 @@ export default function Vitrine() {
                       </div>
                     )}
 
-                    {/* Infos produit — style Amazon */}
                     <div className="vitrine-detail-info">
                       <h3 className="vitrine-detail-title">
                         {item.description || 'Sans titre'}
                       </h3>
                       <p className="vitrine-detail-price">
-                        {item.price?.toFixed(2)} $
+                        {formatPrice(item.price)} $
                       </p>
                       <p className="vitrine-detail-id">#{item.uniqueId}</p>
 
@@ -278,7 +265,6 @@ export default function Vitrine() {
                         <span className="vitrine-card-category">{item.category}</span>
                       )}
 
-                      {/* Description longue */}
                       {item.longDescription && (
                         <div className="vitrine-detail-description">
                           <p>{item.longDescription}</p>
@@ -302,7 +288,6 @@ export default function Vitrine() {
         </div>
       )}
 
-      {/* Footer */}
       <footer className="vitrine-footer">
         <p>✂️ L'Atelier du Loft — Josée Bourgouin</p>
         <p className="vitrine-footer-cta">
