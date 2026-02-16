@@ -1,0 +1,151 @@
+=============================================
+ STOCK DU LOFT - INTEGRATION AI PHOTO
+ Instructions d'installation
+=============================================
+
+CONTENU DU ZIP:
+  functions/package.json     - Dependances Cloud Functions
+  functions/index.js         - Cloud Function (appelle Claude AI)
+  src/services/aiService.js  - Service React pour appeler la fonction
+  src/components/AiSuggestButton.jsx - Bouton violet "Suggestion AI"
+  install-ai.bat             - Script d'installation automatique
+  LISEZMOI.txt               - Ce fichier
+
+=============================================
+ETAPE 1 - PREPARATION
+=============================================
+
+1. Decompressez ce zip dans D:\stockduloft\
+   Vous devriez avoir: D:\stockduloft\stockduloft-ai\
+
+2. Creez un compte API Anthropic:
+   - Allez sur https://console.anthropic.com
+   - Creez un compte
+   - Generez une cle API (commence par sk-ant-...)
+   - Gardez-la, vous en aurez besoin a l'etape 4
+
+=============================================
+ETAPE 2 - INSTALLATION AUTOMATIQUE
+=============================================
+
+1. Ouvrez PowerShell
+2. cd D:\stockduloft
+3. .\stockduloft-ai\install-ai.bat
+
+Le script va copier les fichiers et installer les dependances.
+
+=============================================
+ETAPE 3 - MODIFICATIONS MANUELLES A AddItem.jsx
+=============================================
+
+Ouvrez src\pages\AddItem.jsx et faites ces 3 ajouts:
+
+--- AJOUT 1: En haut du fichier, avec les autres imports ---
+
+import AiSuggestButton from '../components/AiSuggestButton';
+
+--- AJOUT 2: Dans le composant, apres les autres handlers ---
+
+const handleAiSuggestion = (suggestion) => {
+  if (suggestion.category) {
+    setCategory(suggestion.category);
+  }
+  if (suggestion.description) {
+    setDescription(suggestion.description);
+  }
+};
+
+--- AJOUT 3: Dans le JSX, APRES la section photo et AVANT les champs categorie/description ---
+
+{photo && (
+  <AiSuggestButton
+    imageBase64={photo}
+    categories={categories}
+    onSuggestion={handleAiSuggestion}
+  />
+)}
+
+NOTE: "categories" fait reference a la liste des categories disponibles.
+Si votre variable s'appelle autrement, ajustez le nom.
+Si vous n'avez pas de liste de categories en state, vous pouvez
+simplement enlever cette prop: <AiSuggestButton imageBase64={photo} onSuggestion={handleAiSuggestion} />
+
+=============================================
+ETAPE 3B - MODIFICATION DE firebase.json
+=============================================
+
+Remplacez le contenu de firebase.json par:
+
+{
+  "hosting": {
+    "public": "dist",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs18"
+  }
+}
+
+=============================================
+ETAPE 4 - CONFIGURATION CLE API
+=============================================
+
+Dans PowerShell, depuis D:\stockduloft:
+
+firebase functions:secrets:set ANTHROPIC_API_KEY
+
+Quand demande, collez votre cle sk-ant-... et appuyez Enter.
+
+=============================================
+ETAPE 5 - DEPLOIEMENT
+=============================================
+
+Dans PowerShell, depuis D:\stockduloft:
+
+firebase deploy --only functions
+npm run build
+firebase deploy --only hosting
+
+=============================================
+ETAPE 6 - TEST
+=============================================
+
+1. Ouvrez stockduloft.web.app (ou latelierduloft.ca)
+2. Connectez-vous
+3. Allez dans Ajouter un article
+4. Prenez une photo
+5. Cliquez le bouton violet "Suggestion AI"
+6. La categorie et description se remplissent automatiquement!
+7. Modifiez si necessaire, puis sauvegardez
+
+=============================================
+COUT ESTIMEE
+=============================================
+
+Claude Haiku 4.5: ~0.002$ par photo analysee
+50 articles/mois = ~0.10$/mois
+Pratiquement gratuit!
+
+=============================================
+DEPANNAGE
+=============================================
+
+Erreur "CORS": Verifiez que cors: true est dans la config
+de la Cloud Function (deja configure dans index.js)
+
+Erreur "401/403": Verifiez que la cle API est bien configuree:
+firebase functions:secrets:access ANTHROPIC_API_KEY
+
+Erreur "Function not found": Verifiez le deploiement:
+firebase deploy --only functions
+puis verifiez dans Firebase Console > Functions
+
+La fonction ne repond pas: Verifiez les logs:
+firebase functions:log --only analyzePhoto
