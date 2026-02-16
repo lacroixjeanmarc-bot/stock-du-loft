@@ -15,6 +15,23 @@ function formatPrice(price) {
   return price?.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 }
 
+const PLANS = {
+  free: {
+    name: 'Découverte',
+    badge: '🆓',
+    articlesLimit: 25,
+    vitrineLimit: 10,
+    price: null
+  },
+  artisan: {
+    name: 'Artisan',
+    badge: '⭐',
+    articlesLimit: Infinity,
+    vitrineLimit: Infinity,
+    price: { monthly: 12.99, yearly: 100.00 }
+  }
+};
+
 export default function AboutPage() {
   const [soldDays, setSoldDays] = useState(7);
   const [stores, setStores] = useState([]);
@@ -22,6 +39,7 @@ export default function AboutPage() {
   const [showAddStore, setShowAddStore] = useState(false);
   const [editingStore, setEditingStore] = useState(null);
   const [storeForm, setStoreForm] = useState({ name: '', commissionPercent: '', locationFee: '' });
+  const [subscription, setSubscription] = useState(null);
   const [reportMonth, setReportMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -30,8 +48,16 @@ export default function AboutPage() {
   useEffect(() => {
     const settingsRef = ref(database, SETTINGS_PATH);
     const unsub = onValue(settingsRef, (snap) => {
-      if (snap.exists() && snap.val().vitrineSoldDays !== undefined) {
-        setSoldDays(snap.val().vitrineSoldDays);
+      if (snap.exists()) {
+        const data = snap.val();
+        if (data.vitrineSoldDays !== undefined) {
+          setSoldDays(data.vitrineSoldDays);
+        }
+        if (data.subscription) {
+          setSubscription(data.subscription);
+        } else {
+          setSubscription({ plan: 'free', planType: null, startDate: null, expiryDate: null });
+        }
       }
     });
     return unsub;
@@ -51,6 +77,28 @@ export default function AboutPage() {
     const days = parseInt(value);
     setSoldDays(days);
     await update(ref(database, SETTINGS_PATH), { vitrineSoldDays: days });
+  };
+
+  // ---- Subscription Info ----
+  const currentPlan = PLANS[subscription?.plan || 'free'];
+  const totalArticles = items.filter((i) => i.status !== 'sold').length;
+  const articlesPercent = currentPlan.articlesLimit === Infinity
+    ? 0
+    : Math.min(100, Math.round((totalArticles / currentPlan.articlesLimit) * 100));
+  const isFreePlan = (subscription?.plan || 'free') === 'free';
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('fr-CA', { year: 'numeric', month: 'long', day: 'numeric' });
+  };
+
+  const daysUntilExpiry = () => {
+    if (!subscription?.expiryDate) return null;
+    const now = new Date();
+    const exp = new Date(subscription.expiryDate);
+    const diff = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+    return diff;
   };
 
   // ---- Store Management ----
@@ -81,7 +129,6 @@ export default function AboutPage() {
   };
 
   const handleDeleteStore = async (store) => {
-    // Vérifier si des articles sont en consigne dans ce magasin
     const consignedItems = items.filter(
       (i) => i.status === 'consignment' && i.consignmentStoreId === store.id
     );
@@ -102,7 +149,6 @@ export default function AboutPage() {
 
     const report = {};
 
-    // Initialiser avec tous les magasins
     stores.forEach((store) => {
       report[store.id] = {
         storeName: store.name,
@@ -117,12 +163,10 @@ export default function AboutPage() {
     });
 
     items.forEach((item) => {
-      // Articles actuellement en consigne
       if (item.status === 'consignment' && item.consignmentStoreId && report[item.consignmentStoreId]) {
         report[item.consignmentStoreId].itemsInConsignment++;
       }
 
-      // Articles vendus ce mois-ci depuis une consigne
       if (
         item.status === 'sold' &&
         item.saleDate &&
@@ -149,11 +193,98 @@ export default function AboutPage() {
     <div className="page about-page">
       <h2 className="page-title">ℹ️ À propos</h2>
 
+      {/* ======= ABONNEMENT ======= */}
+      <div className="about-card" style={{ marginBottom: '12px' }}>
+        <h4>📋 Mon abonnement</h4>
+
+        <div className="subscription-section">
+          <div className="subscription-plan-row">
+            <div className="subscription-plan-info">
+              <span className="subscription-plan-badge">
+                {currentPlan.badge} {currentPlan.name}
+              </span>
+              {!isFreePlan && subscription?.planType && (
+                <span className="subscription-plan-type">
+                  {subscription.planType === 'yearly' ? '100.00 $/an' : '12.99 $/mois'}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="subscription-articles">
+            <div className="subscription-articles-label">
+              <span>📦 Articles actifs</span>
+              <span>
+                {totalArticles}
+                {isFreePlan ? ` / ${currentPlan.articlesLimit}` : ' — Illimité'}
+              </span>
+            </div>
+            {isFreePlan && (
+              <div className="subscription-progress-bar">
+                <div
+                  className={`subscription-progress-fill ${articlesPercent >= 80 ? 'warning' : ''} ${articlesPercent >= 100 ? 'full' : ''}`}
+                  style={{ width: `${articlesPercent}%` }}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="subscription-detail-row">
+            <span>🖼️ Vitrine publique</span>
+            <span>{isFreePlan ? `${currentPlan.vitrineLimit} articles max` : 'Illimitée'}</span>
+          </div>
+
+          <div className="subscription-detail-row">
+            <span>📍 Suivi consignes</span>
+            <span>{isFreePlan ? '—' : '✓'}</span>
+          </div>
+
+          <div className="subscription-detail-row">
+            <span>🏷️ Étiquettes QR</span>
+            <span>{isFreePlan ? '—' : '✓'}</span>
+          </div>
+
+          {!isFreePlan && subscription?.expiryDate && (
+            <div className="subscription-renewal">
+              <span>📅 Renouvellement</span>
+              <span className={daysUntilExpiry() <= 7 ? 'renewal-soon' : ''}>
+                {formatDate(subscription.expiryDate)}
+                {daysUntilExpiry() <= 7 && daysUntilExpiry() > 0 && (
+                  <span className="renewal-badge">Dans {daysUntilExpiry()} jour(s)</span>
+                )}
+              </span>
+            </div>
+          )}
+
+          {isFreePlan ? (
+            <div className="subscription-upgrade">
+              <p className="subscription-upgrade-pitch">
+                Passez au plan Artisan pour des articles illimités, la vitrine complète, le suivi des consignes et plus encore.
+              </p>
+              <div className="subscription-upgrade-options">
+                <button className="btn btn-upgrade btn-full">
+                  ⭐ Plan Artisan — 12.99 $/mois
+                </button>
+                <button className="btn btn-upgrade-yearly btn-full">
+                  💎 Plan Annuel — 100 $/an
+                  <span className="upgrade-savings">Économisez 56 $ !</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="subscription-manage">
+              <button className="btn btn-small btn-secondary btn-full">
+                Gérer mon abonnement
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* ======= GESTION DES MAGASINS ======= */}
       <div className="about-card" style={{ marginBottom: '12px' }}>
         <h4>🏪 Magasins de consigne</h4>
 
-        {/* Liste des magasins */}
         {stores.length === 0 ? (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '12px 0' }}>
             Aucun magasin configuré
@@ -163,7 +294,6 @@ export default function AboutPage() {
             {stores.map((store) => (
               <div key={store.id} className="store-card">
                 {editingStore === store.id ? (
-                  /* Formulaire d'édition */
                   <div className="store-edit-form">
                     <div className="form-group">
                       <label className="form-label">Nom</label>
@@ -213,7 +343,6 @@ export default function AboutPage() {
                     </div>
                   </div>
                 ) : (
-                  /* Affichage normal */
                   <div className="store-info">
                     <div className="store-header">
                       <span className="store-name">{store.name}</span>
@@ -237,7 +366,6 @@ export default function AboutPage() {
                         <span className="store-tag">Aucun frais configuré</span>
                       )}
                     </div>
-                    {/* Nombre d'articles en consigne */}
                     {items.filter((i) => i.status === 'consignment' && i.consignmentStoreId === store.id).length > 0 && (
                       <p className="store-consigned-count">
                         📦 {items.filter((i) => i.status === 'consignment' && i.consignmentStoreId === store.id).length} article(s) en consigne
@@ -250,7 +378,6 @@ export default function AboutPage() {
           </div>
         )}
 
-        {/* Formulaire d'ajout */}
         {showAddStore ? (
           <div className="store-add-form">
             <div className="form-group">
@@ -406,7 +533,7 @@ export default function AboutPage() {
           <img src="/pwa-192x192.png" alt="Stock du Loft" />
         </div>
         <h3>✂️ Stock du Loft</h3>
-        <p className="about-version">Version 1.1</p>
+        <p className="about-version">Version 1.2</p>
         <p className="about-description">
           Application de gestion d'inventaire conçue pour les artisans et créateurs.
           Gérez vos articles, suivez vos consignes et enregistrez vos ventes en toute simplicité.
@@ -420,11 +547,6 @@ export default function AboutPage() {
           <a href="mailto:lacroix.jeanmarc@gmail.com" className="about-email">
             📧 lacroix.jeanmarc@gmail.com
           </a>
-        </div>
-        <div className="about-donate">
-          <p>☕ Vous aimez cette application?</p>
-          <p>Payez-moi un café par Virement Interac :</p>
-          <p className="about-donate-email">lacroix.jeanmarc@gmail.com</p>
         </div>
       </div>
     </div>
