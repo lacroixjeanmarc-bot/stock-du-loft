@@ -1,5 +1,15 @@
-import { useState, useEffect } from 'react';
-import { subscribeToItems, returnToInventory, deleteItem, consignItem, updateItem, getItemPhoto } from '../services/inventoryService';
+import { useState, useEffect, useRef } from 'react';
+import {
+  subscribeToItems,
+  returnToInventory,
+  deleteItem,
+  consignItem,
+  updateItem,
+  getItemPhoto,
+  getAllItemPhotos,
+  addExtraPhoto,
+  deleteExtraPhoto
+} from '../services/inventoryService';
 
 const STATUS_LABELS = {
   all: 'Tous',
@@ -20,9 +30,12 @@ export default function InventoryList() {
   const [search, setSearch] = useState('');
   const [expandedItem, setExpandedItem] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [loadedPhotos, setLoadedPhotos] = useState({});
+  const [loadedPhotos, setLoadedPhotos] = useState({}); // { itemId: [photo0, photo1, ...] }
+  const [activePhotoIndex, setActivePhotoIndex] = useState({}); // { itemId: index }
   const [editingItem, setEditingItem] = useState(null);
-  const [editForm, setEditForm] = useState({ description: '', price: '', category: '' });
+  const [editForm, setEditForm] = useState({ description: '', longDescription: '', price: '', category: '' });
+  const [addingPhoto, setAddingPhoto] = useState(false);
+  const extraPhotoRef = useRef(null);
 
   useEffect(() => {
     const unsubscribe = subscribeToItems((data) => {
@@ -32,26 +45,69 @@ export default function InventoryList() {
     return unsubscribe;
   }, []);
 
-  // Charger la photo quand on ouvre un item
+  // Charger toutes les photos quand on ouvre un item
   const handleExpand = async (item) => {
     if (expandedItem === item.id) {
       setExpandedItem(null);
       return;
     }
     setExpandedItem(item.id);
+    setActivePhotoIndex((prev) => ({ ...prev, [item.id]: 0 }));
 
-    // Charger la photo si pas déjà en cache
+    // Charger toutes les photos si pas déjà en cache
     if (!loadedPhotos[item.id]) {
-      if (item.photoBase64) {
-        // Ancien format: photo directement dans l'item
-        setLoadedPhotos((prev) => ({ ...prev, [item.id]: item.photoBase64 }));
-      } else if (item.hasPhoto) {
-        // Nouveau format: photo séparée
-        const photo = await getItemPhoto(item.id);
-        if (photo) {
-          setLoadedPhotos((prev) => ({ ...prev, [item.id]: photo }));
+      if (item.hasPhoto || item.photoBase64) {
+        const photos = await getAllItemPhotos(item.id);
+        // Fallback: ancien format avec photo dans l'item
+        if (photos.length === 0 && item.photoBase64) {
+          setLoadedPhotos((prev) => ({ ...prev, [item.id]: [item.photoBase64] }));
+        } else {
+          setLoadedPhotos((prev) => ({ ...prev, [item.id]: photos }));
         }
       }
+    }
+  };
+
+  // Ajouter une photo supplémentaire
+  const handleAddExtraPhoto = async (item, e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setAddingPhoto(true);
+    try {
+      const result = await addExtraPhoto(item.id, file);
+      if (result === null) {
+        alert('Maximum de 5 photos atteint pour cet article.');
+      } else {
+        // Recharger les photos
+        const photos = await getAllItemPhotos(item.id);
+        setLoadedPhotos((prev) => ({ ...prev, [item.id]: photos }));
+      }
+    } catch (err) {
+      console.error('Erreur ajout photo:', err);
+      alert('Erreur lors de l\'ajout de la photo.');
+    } finally {
+      setAddingPhoto(false);
+      if (extraPhotoRef.current) extraPhotoRef.current.value = '';
+    }
+  };
+
+  // Supprimer une photo extra
+  const handleDeleteExtraPhoto = async (item, photoIndex) => {
+    if (photoIndex === 0) {
+      alert('La photo principale ne peut pas être supprimée ici. Supprimez l\'article pour retirer la photo principale.');
+      return;
+    }
+    if (!confirm('Supprimer cette photo?')) return;
+
+    try {
+      await deleteExtraPhoto(item.id, photoIndex);
+      // Recharger les photos
+      const photos = await getAllItemPhotos(item.id);
+      setLoadedPhotos((prev) => ({ ...prev, [item.id]: photos }));
+      setActivePhotoIndex((prev) => ({ ...prev, [item.id]: 0 }));
+    } catch (err) {
+      console.error('Erreur suppression photo:', err);
     }
   };
 
@@ -77,6 +133,7 @@ export default function InventoryList() {
     setEditingItem(item.id);
     setEditForm({
       description: item.description || '',
+      longDescription: item.longDescription || '',
       price: item.price?.toString() || '',
       category: item.category || ''
     });
@@ -85,6 +142,7 @@ export default function InventoryList() {
   const handleSaveEdit = async (item) => {
     await updateItem(item.id, {
       description: editForm.description.trim(),
+      longDescription: editForm.longDescription.trim(),
       price: parseFloat(editForm.price) || 0,
       category: editForm.category.trim()
     });
@@ -179,11 +237,19 @@ export default function InventoryList() {
                 {/* Miniature ou placeholder */}
                 <div className="item-photo">
                   {item.thumbnail ? (
-                    <img src={item.thumbnail} alt={item.description} className="item-thumbnail" />
+                    <img
+                      src={item.thumbnail}
+                      alt={item.description}
+                      className="item-thumbnail"
+                    />
                   ) : item.hasPhoto || item.photoBase64 ? (
                     <div className="photo-placeholder">🖼️</div>
                   ) : (
                     <div className="photo-placeholder">📷</div>
+                  )}
+                  {/* Badge nombre de photos */}
+                  {(item.photoCount > 1) && (
+                    <span className="photo-count-badge">{item.photoCount}</span>
                   )}
                 </div>
 
@@ -223,18 +289,56 @@ export default function InventoryList() {
                 </div>
               </div>
 
-              {/* Expanded: photo + actions */}
+              {/* Expanded: galerie photos + actions */}
               {expandedItem === item.id && (
                 <div onClick={(e) => e.stopPropagation()}>
-                  {/* Photo chargée à la demande */}
-                  {loadedPhotos[item.id] && (
-                    <div className="item-expanded-photo">
-                      <img src={loadedPhotos[item.id]} alt={item.description} />
+                  {/* Galerie de photos */}
+                  {loadedPhotos[item.id] && loadedPhotos[item.id].length > 0 && (
+                    <div className="photo-gallery">
+                      {/* Photo principale (grande) */}
+                      <div className="gallery-main">
+                        <img
+                          src={loadedPhotos[item.id][activePhotoIndex[item.id] || 0]}
+                          alt={item.description}
+                        />
+                      </div>
+                      {/* Thumbnails en dessous */}
+                      {loadedPhotos[item.id].length > 1 && (
+                        <div className="gallery-thumbs">
+                          {loadedPhotos[item.id].map((photo, idx) => (
+                            <div
+                              key={idx}
+                              className={`gallery-thumb ${(activePhotoIndex[item.id] || 0) === idx ? 'active' : ''}`}
+                              onClick={() => setActivePhotoIndex((prev) => ({ ...prev, [item.id]: idx }))}
+                            >
+                              <img src={photo} alt={`Photo ${idx + 1}`} />
+                              {/* Bouton supprimer pour les extras */}
+                              {idx > 0 && editingItem === item.id && (
+                                <button
+                                  className="gallery-thumb-delete"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteExtraPhoto(item, idx);
+                                  }}
+                                >✕</button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
+
                   {item.hasPhoto && !loadedPhotos[item.id] && (
                     <div className="item-expanded-photo loading">
                       <div className="loading-spinner" />
+                    </div>
+                  )}
+
+                  {/* Description longue (lecture seule si pas en mode édition) */}
+                  {item.longDescription && editingItem !== item.id && (
+                    <div className="item-long-description">
+                      <p>{item.longDescription}</p>
                     </div>
                   )}
 
@@ -243,12 +347,26 @@ export default function InventoryList() {
                     {editingItem === item.id ? (
                       <div className="item-edit-form">
                         <div className="form-group">
-                          <label className="form-label">Description</label>
+                          <label className="form-label">Titre</label>
                           <input
                             type="text"
                             value={editForm.description}
-                            onChange={(e) => setEditForm(f => ({ ...f, description: e.target.value }))}
+                            onChange={(e) =>
+                              setEditForm((f) => ({ ...f, description: e.target.value }))
+                            }
                             className="form-input"
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Description détaillée</label>
+                          <textarea
+                            value={editForm.longDescription}
+                            onChange={(e) =>
+                              setEditForm((f) => ({ ...f, longDescription: e.target.value }))
+                            }
+                            className="form-input form-textarea"
+                            rows="4"
+                            placeholder="Décrivez l'article en détail..."
                           />
                         </div>
                         <div className="form-group">
@@ -256,7 +374,9 @@ export default function InventoryList() {
                           <input
                             type="number"
                             value={editForm.price}
-                            onChange={(e) => setEditForm(f => ({ ...f, price: e.target.value }))}
+                            onChange={(e) =>
+                              setEditForm((f) => ({ ...f, price: e.target.value }))
+                            }
                             className="form-input"
                             step="0.01"
                             min="0"
@@ -268,35 +388,87 @@ export default function InventoryList() {
                           <input
                             type="text"
                             value={editForm.category}
-                            onChange={(e) => setEditForm(f => ({ ...f, category: e.target.value }))}
+                            onChange={(e) =>
+                              setEditForm((f) => ({ ...f, category: e.target.value }))
+                            }
                             className="form-input"
                           />
                         </div>
+
+                        {/* Ajout de photos supplémentaires */}
+                        <div className="form-group">
+                          <label className="form-label">
+                            📷 Photos ({loadedPhotos[item.id]?.length || (item.hasPhoto ? 1 : 0)}/5)
+                          </label>
+                          {(loadedPhotos[item.id]?.length || 0) < 5 && (
+                            <>
+                              <input
+                                ref={extraPhotoRef}
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                onChange={(e) => handleAddExtraPhoto(item, e)}
+                                className="hidden-input"
+                                id={`extra-photo-${item.id}`}
+                              />
+                              <button
+                                type="button"
+                                className="btn btn-small btn-add-photo"
+                                onClick={() => extraPhotoRef.current?.click()}
+                                disabled={addingPhoto}
+                              >
+                                {addingPhoto ? '⏳ Ajout en cours...' : '➕ Ajouter une photo'}
+                              </button>
+                            </>
+                          )}
+                          {(loadedPhotos[item.id]?.length || 0) >= 5 && (
+                            <p className="form-hint">Maximum de 5 photos atteint</p>
+                          )}
+                        </div>
+
                         <div className="item-edit-actions">
-                          <button className="btn btn-small btn-save" onClick={() => handleSaveEdit(item)}>
+                          <button
+                            className="btn btn-small btn-save"
+                            onClick={() => handleSaveEdit(item)}
+                          >
                             ✓ Sauvegarder
                           </button>
-                          <button className="btn btn-small btn-secondary" onClick={handleCancelEdit}>
+                          <button
+                            className="btn btn-small btn-secondary"
+                            onClick={handleCancelEdit}
+                          >
                             Annuler
                           </button>
                         </div>
                       </div>
                     ) : (
                       <>
-                        <button className="btn btn-small btn-edit" onClick={() => handleEdit(item)}>
+                        <button
+                          className="btn btn-small btn-edit"
+                          onClick={() => handleEdit(item)}
+                        >
                           ✏️ Modifier
                         </button>
                         {item.status === 'inventory' && (
-                          <button className="btn btn-small btn-consign" onClick={() => handleConsign(item)}>
+                          <button
+                            className="btn btn-small btn-consign"
+                            onClick={() => handleConsign(item)}
+                          >
                             📍 Consigne
                           </button>
                         )}
                         {(item.status === 'consignment' || item.status === 'sold') && (
-                          <button className="btn btn-small btn-return" onClick={() => handleReturnToInventory(item)}>
+                          <button
+                            className="btn btn-small btn-return"
+                            onClick={() => handleReturnToInventory(item)}
+                          >
                             📦 Retour inventaire
                           </button>
                         )}
-                        <button className="btn btn-small btn-delete" onClick={() => handleDelete(item)}>
+                        <button
+                          className="btn btn-small btn-delete"
+                          onClick={() => handleDelete(item)}
+                        >
                           🗑️ Supprimer
                         </button>
                       </>

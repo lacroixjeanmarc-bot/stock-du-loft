@@ -5,10 +5,10 @@ import { addItem, getItemByUniqueId, getNextUniqueId } from '../services/invento
 export default function AddItem() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
-
   const [formData, setFormData] = useState({
     uniqueId: '',
     description: '',
+    longDescription: '',
     price: '',
     category: '',
     itemDate: new Date().toISOString().split('T')[0]
@@ -36,7 +36,6 @@ export default function AddItem() {
   const handlePhotoSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setPhotoFile(file);
     const reader = new FileReader();
     reader.onload = (ev) => setPhotoPreview(ev.target.result);
@@ -86,6 +85,7 @@ export default function AddItem() {
       await addItem({
         uniqueId: formData.uniqueId,
         description: formData.description,
+        longDescription: formData.longDescription,
         price: formData.price,
         category: formData.category,
         itemDate: formData.itemDate,
@@ -107,7 +107,7 @@ export default function AddItem() {
       <h2 className="page-title">Nouvel item</h2>
 
       <form onSubmit={handleSubmit} className="add-form">
-        {/* Photo */}
+        {/* Photo principale */}
         <div className="photo-section">
           <input
             ref={fileInputRef}
@@ -117,7 +117,6 @@ export default function AddItem() {
             onChange={handlePhotoSelect}
             className="hidden-input"
           />
-
           {photoPreview ? (
             <div className="photo-preview-container">
               <img src={photoPreview} alt="Aperçu" className="photo-preview" />
@@ -129,6 +128,7 @@ export default function AddItem() {
               <span>Prendre une photo</span>
             </button>
           )}
+          <p className="photo-hint">📸 Photo principale — vous pourrez ajouter d'autres photos en modifiant l'article</p>
         </div>
 
         {/* Numéro unique */}
@@ -146,9 +146,9 @@ export default function AddItem() {
           />
         </div>
 
-        {/* Description */}
+        {/* Description courte */}
         <div className="form-group">
-          <label className="form-label">Description</label>
+          <label className="form-label">Titre / Description courte</label>
           <input
             type="text"
             name="description"
@@ -157,6 +157,20 @@ export default function AddItem() {
             placeholder="Ex: Sac à main fleuri"
             className="form-input"
           />
+        </div>
+
+        {/* Description longue */}
+        <div className="form-group">
+          <label className="form-label">Description détaillée</label>
+          <textarea
+            name="longDescription"
+            value={formData.longDescription}
+            onChange={handleChange}
+            placeholder="Décrivez l'article en détail : matériaux, dimensions, couleurs, entretien..."
+            className="form-input form-textarea"
+            rows="4"
+          />
+          <p className="form-hint">Affiché dans la vitrine publique</p>
         </div>
 
         {/* Prix */}
