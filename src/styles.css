@@ -3051,3 +3051,153 @@ body {
   white-space: nowrap;
   margin-left: 8px;
 }
+
+/* ======= SALES REPORT ======= */
+.sales-report {
+  margin-top: 12px;
+}
+
+.sales-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.sales-summary-card {
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  border-radius: 10px;
+  padding: 12px 10px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sales-summary-card.sales-summary-highlight {
+  grid-column: 1 / -1;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%);
+  border-color: rgba(139, 92, 246, 0.3);
+  padding: 16px 10px;
+}
+
+.sales-summary-highlight .sales-summary-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #8b5cf6;
+}
+
+.sales-summary-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary, #fff);
+}
+
+.sales-summary-label {
+  font-size: 0.75rem;
+  color: var(--text-muted, #a0a8c0);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sales-deductions {
+  background: rgba(139, 92, 246, 0.05);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  border: 1px solid rgba(139, 92, 246, 0.1);
+}
+
+.sales-breakdown {
+  margin-bottom: 12px;
+}
+
+.sales-breakdown-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted, #a0a8c0);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(139, 92, 246, 0.1);
+}
+
+.sales-breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 0.88rem;
+}
+
+.sales-breakdown-name {
+  color: var(--text-primary, #fff);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sales-breakdown-stats {
+  color: var(--text-muted, #a0a8c0);
+  font-size: 0.82rem;
+  white-space: nowrap;
+  margin-left: 8px;
+}
+
+/* ======= ADMIN PAYMENTS HISTORY ======= */
+.admin-payments-history {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(139, 92, 246, 0.1);
+}
+
+.admin-payments-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted, #a0a8c0);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.admin-payment-row {
+  background: rgba(139, 92, 246, 0.06);
+  border: 1px solid rgba(139, 92, 246, 0.1);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+}
+
+.admin-payment-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.admin-payment-amount {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #22c55e;
+}
+
+.admin-payment-type {
+  font-size: 0.78rem;
+  color: var(--text-muted, #a0a8c0);
+}
+
+.admin-payment-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--text-muted, #a0a8c0);
+}
+
+.admin-payment-details span {
+  white-space: nowrap;
+}

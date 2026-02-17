@@ -1,0 +1,54 @@
+
+/* ======= ADMIN PAYMENTS HISTORY ======= */
+.admin-payments-history {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(139, 92, 246, 0.1);
+}
+
+.admin-payments-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted, #a0a8c0);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.admin-payment-row {
+  background: rgba(139, 92, 246, 0.06);
+  border: 1px solid rgba(139, 92, 246, 0.1);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+}
+
+.admin-payment-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.admin-payment-amount {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #22c55e;
+}
+
+.admin-payment-type {
+  font-size: 0.78rem;
+  color: var(--text-muted, #a0a8c0);
+}
+
+.admin-payment-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--text-muted, #a0a8c0);
+}
+
+.admin-payment-details span {
+  white-space: nowrap;
+}

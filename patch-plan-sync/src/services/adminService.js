@@ -3,7 +3,6 @@ import { database } from '../firebase';
 
 const TENANTS_PATH = 'stockduloft/tenants';
 const SETTINGS_PATH = 'stockduloft/settings';
-const PAYMENTS_PATH = 'stockduloft/payments';
 
 // Email du super admin
 export const SUPER_ADMIN_EMAIL = 'lacroix.jeanmarc@gmail.com';
@@ -17,70 +16,6 @@ export function isSuperAdmin(user) {
  */
 async function syncSubscription(planData) {
   await update(ref(database, `${SETTINGS_PATH}/subscription`), planData);
-}
-
-/**
- * Enregistre un paiement Interac.
- */
-export async function recordPayment(tenantId, paymentData) {
-  const payment = {
-    tenantId,
-    amount: parseFloat(paymentData.amount) || 0,
-    senderName: paymentData.senderName?.trim() || '',
-    referenceNumber: paymentData.referenceNumber?.trim() || '',
-    paymentDate: paymentData.paymentDate || new Date().toISOString().split('T')[0],
-    planType: paymentData.planType || 'monthly',
-    action: paymentData.action || 'activation', // activation | renewal
-    recordedAt: Date.now()
-  };
-
-  const paymentsRef = ref(database, PAYMENTS_PATH);
-  const newRef = push(paymentsRef);
-  await update(newRef, payment);
-
-  // Aussi stocker le dernier paiement sur le tenant
-  await update(ref(database, `${TENANTS_PATH}/${tenantId}/lastPayment`), payment);
-
-  return { id: newRef.key, ...payment };
-}
-
-/**
- * Écoute les paiements d'un tenant.
- */
-export function subscribeToPayments(tenantId, callback) {
-  const paymentsRef = ref(database, PAYMENTS_PATH);
-  const unsubscribe = onValue(paymentsRef, (snapshot) => {
-    const payments = [];
-    if (snapshot.exists()) {
-      snapshot.forEach((child) => {
-        const p = child.val();
-        if (p.tenantId === tenantId) {
-          payments.push({ id: child.key, ...p });
-        }
-      });
-    }
-    payments.sort((a, b) => (b.recordedAt || 0) - (a.recordedAt || 0));
-    callback(payments);
-  });
-  return unsubscribe;
-}
-
-/**
- * Écoute tous les paiements.
- */
-export function subscribeToAllPayments(callback) {
-  const paymentsRef = ref(database, PAYMENTS_PATH);
-  const unsubscribe = onValue(paymentsRef, (snapshot) => {
-    const payments = [];
-    if (snapshot.exists()) {
-      snapshot.forEach((child) => {
-        payments.push({ id: child.key, ...child.val() });
-      });
-    }
-    payments.sort((a, b) => (b.recordedAt || 0) - (a.recordedAt || 0));
-    callback(payments);
-  });
-  return unsubscribe;
 }
 
 /**
@@ -169,6 +104,7 @@ export async function renewPlan(tenantId, planType = null) {
   const tenant = snap.val();
   const type = planType || tenant.planType || 'monthly';
 
+  // Partir de la date d'expiration actuelle ou d'aujourd'hui
   const baseDate = tenant.expiryDate ? new Date(tenant.expiryDate) : new Date();
   const now = new Date();
   const startFrom = baseDate > now ? baseDate : now;
