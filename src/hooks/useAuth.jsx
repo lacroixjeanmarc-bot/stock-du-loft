@@ -4,41 +4,89 @@ import {
   signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
+  sendSignInLinkToEmail,
+  isSignInWithEmailLink,
+  signInWithEmailLink,
   signOut
 } from 'firebase/auth';
 import { auth, googleProvider } from '../firebase';
+import { getTenantProfile, subscribeToTenantProfile, applyTheme } from '../services/tenantService';
 
 const AuthContext = createContext(null);
 
-const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+const actionCodeSettings = {
+  url: window.location.origin + '/app',
+  handleCodeInApp: true
+};
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [tenant, setTenant] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
   useEffect(() => {
-    // Check redirect result on mobile
-    getRedirectResult(auth).catch((error) => {
-      console.error('Redirect auth error:', error);
-    });
+    getRedirectResult(auth).catch(() => {});
 
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
+    // Vérifier si on revient d'un lien magique
+    if (isSignInWithEmailLink(auth, window.location.href)) {
+      let email = window.localStorage.getItem('emailForSignIn');
+      if (!email) {
+        email = window.prompt('Entrez votre adresse courriel pour confirmer la connexion :');
+      }
+      if (email) {
+        signInWithEmailLink(auth, email, window.location.href)
+          .then(() => {
+            window.localStorage.removeItem('emailForSignIn');
+            window.history.replaceState(null, '', window.location.origin + window.location.pathname);
+          })
+          .catch((error) => {
+            console.error('Erreur lien magique:', error);
+          });
+      }
+    }
+
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        // Vérifier si le tenant a un profil (onboarding complété)
+        const profile = await getTenantProfile(firebaseUser.uid);
+        if (profile) {
+          setTenant(profile);
+          setNeedsOnboarding(false);
+          if (profile.theme) applyTheme(profile.theme);
+        } else {
+          setTenant(null);
+          setNeedsOnboarding(true);
+        }
+      } else {
+        setTenant(null);
+        setNeedsOnboarding(false);
+      }
       setLoading(false);
     });
     return unsubscribe;
   }, []);
 
-  const login = async () => {
-    try {
-      if (isMobile) {
-        await signInWithRedirect(auth, googleProvider);
-      } else {
-        await signInWithPopup(auth, googleProvider);
+  // Écouter les changements de profil en temps réel
+  useEffect(() => {
+    if (!user) return;
+    const unsub = subscribeToTenantProfile(user.uid, (profile) => {
+      if (profile) {
+        setTenant(profile);
+        setNeedsOnboarding(false);
+        if (profile.theme) applyTheme(profile.theme);
       }
+    });
+    return unsub;
+  }, [user]);
+
+  const loginWithGoogle = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
     } catch (error) {
-      console.error('Erreur de connexion:', error);
-      // Fallback: si popup echoue, essayer redirect
       if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
         await signInWithRedirect(auth, googleProvider);
       } else {
@@ -47,12 +95,26 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const sendMagicLink = async (email) => {
+    await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+    window.localStorage.setItem('emailForSignIn', email);
+  };
+
   const logout = async () => {
     try {
       await signOut(auth);
+      // Reset theme to default
+      applyTheme('dark-copper');
     } catch (error) {
       console.error('Erreur de deconnexion:', error);
     }
+  };
+
+  // Appelé après onboarding pour mettre à jour le contexte
+  const completeOnboarding = (profile) => {
+    setTenant(profile);
+    setNeedsOnboarding(false);
+    if (profile.theme) applyTheme(profile.theme);
   };
 
   if (loading) {
@@ -65,7 +127,15 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{
+      user,
+      tenant,
+      needsOnboarding,
+      loginWithGoogle,
+      sendMagicLink,
+      logout,
+      completeOnboarding
+    }}>
       {children}
     </AuthContext.Provider>
   );
@@ -74,7 +144,7 @@ export function AuthProvider({ children }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth doit etre utilise dans un AuthProvider');
+    throw new Error('useAuth doit être utilisé dans un AuthProvider');
   }
   return context;
 }

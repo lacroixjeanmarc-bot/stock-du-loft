@@ -1,10 +1,19 @@
-import { ref, push, update, remove, get, query, orderByChild, onValue } from 'firebase/database';
-import { database } from '../firebase';
+import { ref, push, update, remove, get, onValue } from 'firebase/database';
+import { database, auth } from '../firebase';
 import { compressImage, compressThumbnail } from './imageService';
 
-const ITEMS_PATH = 'stockduloft/items';
-const PHOTOS_PATH = 'stockduloft/photos';
-const STORES_PATH = 'stockduloft/stores';
+// Helpers pour les chemins multi-tenant
+function getUid() {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error('Utilisateur non connecté');
+  return uid;
+}
+
+function itemsPath(uid) { return `tenants/${uid || getUid()}/items`; }
+function photosPath(uid) { return `tenants/${uid || getUid()}/photos`; }
+function storesPath(uid) { return `tenants/${uid || getUid()}/stores`; }
+function settingsPath(uid) { return `tenants/${uid || getUid()}/settings`; }
+
 const MAX_EXTRA_PHOTOS = 4;
 
 // ==========================================
@@ -12,14 +21,14 @@ const MAX_EXTRA_PHOTOS = 4;
 // ==========================================
 
 export async function getItemPhoto(itemId) {
-  const photoRef = ref(database, `${PHOTOS_PATH}/${itemId}`);
+  const photoRef = ref(database, `${photosPath()}/${itemId}`);
   const snapshot = await get(photoRef);
   if (!snapshot.exists()) return null;
   return snapshot.val().photoBase64 || null;
 }
 
 export async function getAllItemPhotos(itemId) {
-  const photoRef = ref(database, `${PHOTOS_PATH}/${itemId}`);
+  const photoRef = ref(database, `${photosPath()}/${itemId}`);
   const snapshot = await get(photoRef);
   if (!snapshot.exists()) return [];
   const data = snapshot.val();
@@ -32,7 +41,7 @@ export async function getAllItemPhotos(itemId) {
 }
 
 export async function addExtraPhoto(itemId, photoFile) {
-  const photoRef = ref(database, `${PHOTOS_PATH}/${itemId}`);
+  const photoRef = ref(database, `${photosPath()}/${itemId}`);
   const snapshot = await get(photoRef);
   const data = snapshot.exists() ? snapshot.val() : {};
 
@@ -46,7 +55,7 @@ export async function addExtraPhoto(itemId, photoFile) {
   await update(photoRef, { [`photo_${nextSlot}`]: compressed });
 
   const currentCount = countPhotos(data) + 1;
-  const itemRef = ref(database, `${ITEMS_PATH}/${itemId}`);
+  const itemRef = ref(database, `${itemsPath()}/${itemId}`);
   await update(itemRef, { photoCount: currentCount, updatedAt: Date.now() });
 
   return nextSlot;
@@ -54,14 +63,14 @@ export async function addExtraPhoto(itemId, photoFile) {
 
 export async function deleteExtraPhoto(itemId, index) {
   if (index < 1 || index > MAX_EXTRA_PHOTOS) return;
-  const photoRef = ref(database, `${PHOTOS_PATH}/${itemId}`);
+  const photoRef = ref(database, `${photosPath()}/${itemId}`);
   await update(photoRef, { [`photo_${index}`]: null });
 
   const snapshot = await get(photoRef);
   const data = snapshot.exists() ? snapshot.val() : {};
   const count = countPhotos(data);
 
-  const itemRef = ref(database, `${ITEMS_PATH}/${itemId}`);
+  const itemRef = ref(database, `${itemsPath()}/${itemId}`);
   await update(itemRef, { photoCount: count, updatedAt: Date.now() });
 }
 
@@ -79,7 +88,7 @@ function countPhotos(photoData) {
 // ==========================================
 
 export function subscribeToStores(callback) {
-  const storesRef = ref(database, STORES_PATH);
+  const storesRef = ref(database, storesPath());
   const unsubscribe = onValue(storesRef, (snapshot) => {
     const stores = [];
     if (snapshot.exists()) {
@@ -94,7 +103,7 @@ export function subscribeToStores(callback) {
 }
 
 export async function getStores() {
-  const storesRef = ref(database, STORES_PATH);
+  const storesRef = ref(database, storesPath());
   const snapshot = await get(storesRef);
   const stores = [];
   if (snapshot.exists()) {
@@ -107,7 +116,7 @@ export async function getStores() {
 }
 
 export async function getStore(storeId) {
-  const storeRef = ref(database, `${STORES_PATH}/${storeId}`);
+  const storeRef = ref(database, `${storesPath()}/${storeId}`);
   const snapshot = await get(storeRef);
   if (!snapshot.exists()) return null;
   return { id: storeId, ...snapshot.val() };
@@ -121,19 +130,19 @@ export async function addStore({ name, commissionPercent, locationFee }) {
     active: true,
     createdAt: Date.now()
   };
-  const storesRef = ref(database, STORES_PATH);
+  const storesRef = ref(database, storesPath());
   const newRef = push(storesRef);
   await update(newRef, storeData);
   return { id: newRef.key, ...storeData };
 }
 
 export async function updateStore(storeId, updates) {
-  const storeRef = ref(database, `${STORES_PATH}/${storeId}`);
+  const storeRef = ref(database, `${storesPath()}/${storeId}`);
   await update(storeRef, updates);
 }
 
 export async function deleteStore(storeId) {
-  const storeRef = ref(database, `${STORES_PATH}/${storeId}`);
+  const storeRef = ref(database, `${storesPath()}/${storeId}`);
   await remove(storeRef);
 }
 
@@ -161,8 +170,8 @@ export async function addItem({ uniqueId, description, longDescription, price, p
     updatedAt: Date.now()
   };
 
-  const itemsRef = ref(database, ITEMS_PATH);
-  const newRef = push(itemsRef);
+  const iRef = ref(database, itemsPath());
+  const newRef = push(iRef);
   await update(newRef, itemData);
 
   if (photoFile) {
@@ -170,7 +179,7 @@ export async function addItem({ uniqueId, description, longDescription, price, p
       compressImage(photoFile),
       compressThumbnail(photoFile)
     ]);
-    const photoRef = ref(database, `${PHOTOS_PATH}/${newRef.key}`);
+    const photoRef = ref(database, `${photosPath()}/${newRef.key}`);
     await update(photoRef, { photoBase64 });
     await update(newRef, { hasPhoto: true, thumbnail, photoCount: 1 });
     itemData.hasPhoto = true;
@@ -182,20 +191,20 @@ export async function addItem({ uniqueId, description, longDescription, price, p
 }
 
 export async function updateItem(itemId, updates) {
-  const itemRef = ref(database, `${ITEMS_PATH}/${itemId}`);
+  const itemRef = ref(database, `${itemsPath()}/${itemId}`);
   await update(itemRef, { ...updates, updatedAt: Date.now() });
 }
 
 export async function deleteItem(itemId) {
-  const itemRef = ref(database, `${ITEMS_PATH}/${itemId}`);
-  const photoRef = ref(database, `${PHOTOS_PATH}/${itemId}`);
+  const itemRef = ref(database, `${itemsPath()}/${itemId}`);
+  const photoRef = ref(database, `${photosPath()}/${itemId}`);
   await remove(photoRef);
   await remove(itemRef);
 }
 
 export async function getItemByUniqueId(uniqueId) {
-  const itemsRef = ref(database, ITEMS_PATH);
-  const snapshot = await get(itemsRef);
+  const iRef = ref(database, itemsPath());
+  const snapshot = await get(iRef);
   if (!snapshot.exists()) return null;
 
   const searchId = uniqueId.toUpperCase().trim();
@@ -214,9 +223,9 @@ export async function getItemByUniqueId(uniqueId) {
   return found;
 }
 
-export async function getNextUniqueId(prefix = 'ADL') {
-  const itemsRef = ref(database, ITEMS_PATH);
-  const snapshot = await get(itemsRef);
+export async function getNextUniqueId(prefix = 'ART') {
+  const iRef = ref(database, itemsPath());
+  const snapshot = await get(iRef);
   let maxNum = 0;
   if (snapshot.exists()) {
     snapshot.forEach((child) => {
@@ -237,13 +246,8 @@ export async function getNextUniqueId(prefix = 'ADL') {
 // VENTE (avec support commission + taxes)
 // ==========================================
 
-/**
- * Marque un item comme vendu.
- * Si l'item était en consigne, calcule la commission.
- * Si taxData est fourni, stocke les infos de taxes.
- */
 export async function sellItem(itemId, sellerName, saleDate = null, salePrice = null, marketName = '', isGift = false, giftNote = '', taxData = null) {
-  const itemRef = ref(database, `${ITEMS_PATH}/${itemId}`);
+  const itemRef = ref(database, `${itemsPath()}/${itemId}`);
   const itemSnap = await get(itemRef);
   const itemData = itemSnap.exists() ? itemSnap.val() : {};
 
@@ -296,11 +300,8 @@ export async function sellItem(itemId, sellerName, saleDate = null, salePrice = 
   return updates;
 }
 
-/**
- * Met un item en consigne chez un marchand.
- */
 export async function consignItem(itemId, storeName, consignmentDate = null, storeId = '') {
-  const itemRef = ref(database, `${ITEMS_PATH}/${itemId}`);
+  const itemRef = ref(database, `${itemsPath()}/${itemId}`);
   await update(itemRef, {
     status: 'consignment',
     consignmentStore: storeName.trim(),
@@ -310,11 +311,8 @@ export async function consignItem(itemId, storeName, consignmentDate = null, sto
   });
 }
 
-/**
- * Remet un item en inventaire.
- */
 export async function returnToInventory(itemId) {
-  const itemRef = ref(database, `${ITEMS_PATH}/${itemId}`);
+  const itemRef = ref(database, `${itemsPath()}/${itemId}`);
   await update(itemRef, {
     status: 'inventory',
     consignmentStore: '',
@@ -344,8 +342,8 @@ export async function returnToInventory(itemId) {
 // ==========================================
 
 export function subscribeToItems(callback) {
-  const itemsRef = ref(database, ITEMS_PATH);
-  const unsubscribe = onValue(itemsRef, (snapshot) => {
+  const iRef = ref(database, itemsPath());
+  const unsubscribe = onValue(iRef, (snapshot) => {
     const items = [];
     if (snapshot.exists()) {
       snapshot.forEach((child) => {
@@ -356,4 +354,43 @@ export function subscribeToItems(callback) {
     callback(items);
   });
   return unsubscribe;
+}
+
+// ==========================================
+// VITRINE PUBLIQUE (lecture par UID, pas auth)
+// ==========================================
+
+export function subscribeToPublicItems(uid, callback) {
+  const iRef = ref(database, `tenants/${uid}/items`);
+  const unsubscribe = onValue(iRef, (snapshot) => {
+    const items = [];
+    if (snapshot.exists()) {
+      snapshot.forEach((child) => {
+        items.push({ id: child.key, ...child.val() });
+      });
+    }
+    items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    callback(items);
+  });
+  return unsubscribe;
+}
+
+export async function getPublicItemPhoto(uid, itemId) {
+  const photoRef = ref(database, `tenants/${uid}/photos/${itemId}`);
+  const snapshot = await get(photoRef);
+  if (!snapshot.exists()) return null;
+  const data = snapshot.val();
+  const photos = [];
+  if (data.photoBase64) photos.push(data.photoBase64);
+  for (let i = 1; i <= MAX_EXTRA_PHOTOS; i++) {
+    if (data[`photo_${i}`]) photos.push(data[`photo_${i}`]);
+  }
+  return photos;
+}
+
+export function subscribeToPublicSettings(uid, callback) {
+  const sRef = ref(database, `tenants/${uid}/settings`);
+  return onValue(sRef, (snap) => {
+    callback(snap.exists() ? snap.val() : {});
+  });
 }

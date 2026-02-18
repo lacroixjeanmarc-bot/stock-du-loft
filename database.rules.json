@@ -1,0 +1,69 @@
+{
+  "rules": {
+    // Slugs — lecture publique, écriture auth seulement
+    "slugs": {
+      ".read": true,
+      "$slug": {
+        ".write": "auth !== null"
+      }
+    },
+
+    // Préfixes — lecture publique, écriture auth seulement
+    "prefixes": {
+      ".read": true,
+      "$prefix": {
+        ".write": "auth !== null"
+      }
+    },
+
+    // Tenants — chaque tenant accède seulement à ses propres données
+    "tenants": {
+      "$uid": {
+        // Le profil est lisible publiquement (pour la vitrine)
+        "profile": {
+          ".read": true,
+          ".write": "auth !== null && auth.uid === $uid"
+        },
+
+        // Items lisibles publiquement (vitrine), écriture par le propriétaire
+        "items": {
+          ".read": true,
+          ".write": "auth !== null && auth.uid === $uid"
+        },
+
+        // Photos lisibles publiquement (vitrine), écriture par le propriétaire
+        "photos": {
+          ".read": true,
+          ".write": "auth !== null && auth.uid === $uid"
+        },
+
+        // Settings lisibles publiquement (vitrine — soldDays), écriture propriétaire
+        "settings": {
+          ".read": true,
+          ".write": "auth !== null && auth.uid === $uid"
+        },
+
+        // Stores — seulement le propriétaire
+        "stores": {
+          ".read": "auth !== null && auth.uid === $uid",
+          ".write": "auth !== null && auth.uid === $uid"
+        },
+
+        // Dernier paiement — admin seulement
+        "lastPayment": {
+          ".read": "auth !== null",
+          ".write": "auth !== null"
+        }
+      },
+
+      // Super admin peut lister tous les tenants
+      ".read": "auth !== null && auth.token.email === 'lacroix.jeanmarc@gmail.com'"
+    },
+
+    // Paiements — admin seulement
+    "payments": {
+      ".read": "auth !== null",
+      ".write": "auth !== null"
+    }
+  }
+}

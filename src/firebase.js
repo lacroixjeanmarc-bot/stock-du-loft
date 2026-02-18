@@ -3,14 +3,13 @@ import { getDatabase } from 'firebase/database';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCrFLv4OkNYI86ll6U0Xjo5OegDaUzqFMA",
-  authDomain: "stockduloft.firebaseapp.com",
-  databaseURL: "https://stockduloft-default-rtdb.firebaseio.com",
-  projectId: "stockduloft",
-  storageBucket: "stockduloft.firebasestorage.app",
+  apiKey: "AIzaSyBLRfIvin2GeZzM2k91UvVVBxKzYDFC4XE",
+  authDomain: "vitrineartisan.firebaseapp.com",
+  databaseURL: "https://vitrineartisan-default-rtdb.firebaseio.com",
+  projectId: "vitrineartisan",
+  storageBucket: "vitrineartisan.firebasestorage.app",
   messagingSenderId: "375022059708",
-  appId: "1:375022059708:web:f059d080070233a5b590b9",
-  measurementId: "G-C7CW1SSW2Z"
+  appId: "1:375022059708:web:f059d080070233a5b590b9"
 };
 
 const app = initializeApp(firebaseConfig);

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ref, onValue } from 'firebase/database';
-import { database } from '../firebase';
+import { database, auth } from '../firebase';
 import { getItemByUniqueId, sellItem, getStore } from '../services/inventoryService';
 import { useAuth } from '../hooks/useAuth';
 
@@ -9,14 +9,15 @@ function formatPrice(price) {
 }
 
 export default function QuickSale() {
-  const { user } = useAuth();
-  const [searchId, setSearchId] = useState('ADL-');
+  const { user, tenant } = useAuth();
+  const prefix = tenant?.prefix || 'ART';
+  const [searchId, setSearchId] = useState(`${prefix}-`);
   const [foundItem, setFoundItem] = useState(null);
   const [storeInfo, setStoreInfo] = useState(null);
   const [sellerName, setSellerName] = useState(user?.displayName?.split(' ')[0] || '');
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   const [salePrice, setSalePrice] = useState('');
-  const [marketName, setMarketName] = useState(() => localStorage.getItem('sdl_marketName') || '');
+  const [marketName, setMarketName] = useState(() => localStorage.getItem('va_marketName') || '');
   const [searching, setSearching] = useState(false);
   const [selling, setSelling] = useState(false);
   const [error, setError] = useState('');
@@ -28,7 +29,9 @@ export default function QuickSale() {
   const [taxSettings, setTaxSettings] = useState(null);
 
   useEffect(() => {
-    const settingsRef = ref(database, 'stockduloft/settings/taxes');
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    const settingsRef = ref(database, `tenants/${uid}/settings/taxes`);
     const unsub = onValue(settingsRef, (snap) => {
       if (snap.exists()) {
         setTaxSettings(snap.val());
@@ -43,7 +46,6 @@ export default function QuickSale() {
   const tpsRate = taxSettings?.tpsRate || 5;
   const tvqRate = taxSettings?.tvqRate || 9.975;
 
-  // Calcul taxes en temps réel
   const getTaxPreview = () => {
     if (!taxEnabled || isGift) return null;
     const price = parseFloat(salePrice) || 0;
@@ -82,7 +84,6 @@ export default function QuickSale() {
       setFoundItem(item);
       setSalePrice(item.price?.toFixed(2) || '');
 
-      // Charger les infos du magasin si en consigne
       if (item.status === 'consignment' && item.consignmentStoreId) {
         const store = await getStore(item.consignmentStoreId);
         setStoreInfo(store);
@@ -95,7 +96,6 @@ export default function QuickSale() {
     }
   };
 
-  // Calcul de la commission en temps réel
   const getCommissionPreview = () => {
     if (!storeInfo || !storeInfo.commissionPercent || isGift) return null;
     const price = parseFloat(salePrice) || 0;
@@ -115,7 +115,6 @@ export default function QuickSale() {
     try {
       const finalPrice = isGift ? 0 : (parseFloat(salePrice) || foundItem.price);
 
-      // Calculer taxes pour enregistrer avec la vente
       let taxData = null;
       if (taxEnabled && !isGift && finalPrice > 0) {
         const tps = Math.round(finalPrice * tpsRate) / 100;
@@ -154,7 +153,7 @@ export default function QuickSale() {
       setSuccess(msg);
       setFoundItem(null);
       setStoreInfo(null);
-      setSearchId('ADL-');
+      setSearchId(`${prefix}-`);
       setSalePrice('');
       setIsGift(false);
       setGiftNote('');
@@ -167,7 +166,7 @@ export default function QuickSale() {
   };
 
   const resetSearch = () => {
-    setSearchId('ADL-');
+    setSearchId(`${prefix}-`);
     setFoundItem(null);
     setStoreInfo(null);
     setSalePrice('');
@@ -181,14 +180,13 @@ export default function QuickSale() {
     <div className="page sale-page">
       <h2 className="page-title">💰 Vente rapide</h2>
 
-      {/* Recherche par numéro */}
       <form onSubmit={handleSearch} className="sale-search-form">
         <div className="sale-search-row">
           <input
             type="text"
             value={searchId}
             onChange={(e) => setSearchId(e.target.value.toUpperCase())}
-            placeholder="Ex: ADL-001"
+            placeholder={`Ex: ${prefix}-001`}
             className="form-input sale-search-input"
             autoComplete="off"
             autoFocus
@@ -203,7 +201,6 @@ export default function QuickSale() {
         </div>
       </form>
 
-      {/* Message de succès */}
       {success && (
         <div className="sale-success">
           <p style={{ whiteSpace: 'pre-line' }}>{success}</p>
@@ -213,7 +210,6 @@ export default function QuickSale() {
         </div>
       )}
 
-      {/* Erreur */}
       {error && (
         <div className="sale-error">
           <p>{error}</p>
@@ -223,10 +219,8 @@ export default function QuickSale() {
         </div>
       )}
 
-      {/* Item trouvé — confirmation de vente */}
       {foundItem && (
         <div className="sale-confirmation">
-          {/* Photo et info de l'item */}
           <div className="sale-item-card">
             {foundItem.photoBase64 ? (
               <img
@@ -254,9 +248,7 @@ export default function QuickSale() {
             </div>
           </div>
 
-          {/* Informations de vente */}
           <div className="sale-form">
-            {/* Option cadeau */}
             <div className="form-group">
               <label className="gift-toggle">
                 <input
@@ -272,7 +264,6 @@ export default function QuickSale() {
               </label>
             </div>
 
-            {/* Note cadeau */}
             {isGift && (
               <div className="form-group">
                 <label className="form-label">Note</label>
@@ -286,7 +277,6 @@ export default function QuickSale() {
               </div>
             )}
 
-            {/* Prix de vente */}
             {!isGift && (
               <div className="form-group">
                 <label className="form-label">Prix de vente ($)</label>
@@ -309,55 +299,26 @@ export default function QuickSale() {
               </div>
             )}
 
-            {/* Aperçu taxes */}
             {taxPreview && (
               <div className="sale-tax-preview">
-                <div className="tax-calc-row">
-                  <span>Prix</span>
-                  <span>{formatPrice(parseFloat(salePrice))} $</span>
-                </div>
-                <div className="tax-calc-row">
-                  <span>TPS ({tpsRate}%)</span>
-                  <span>{formatPrice(taxPreview.tpsAmount)} $</span>
-                </div>
-                <div className="tax-calc-row">
-                  <span>TVQ ({tvqRate}%)</span>
-                  <span>{formatPrice(taxPreview.tvqAmount)} $</span>
-                </div>
-                <div className="tax-calc-row tax-calc-total">
-                  <span>🧾 Total à encaisser</span>
-                  <span>{formatPrice(taxPreview.totalWithTax)} $</span>
-                </div>
+                <div className="tax-calc-row"><span>Prix</span><span>{formatPrice(parseFloat(salePrice))} $</span></div>
+                <div className="tax-calc-row"><span>TPS ({tpsRate}%)</span><span>{formatPrice(taxPreview.tpsAmount)} $</span></div>
+                <div className="tax-calc-row"><span>TVQ ({tvqRate}%)</span><span>{formatPrice(taxPreview.tvqAmount)} $</span></div>
+                <div className="tax-calc-row tax-calc-total"><span>🧾 Total à encaisser</span><span>{formatPrice(taxPreview.totalWithTax)} $</span></div>
               </div>
             )}
 
-            {/* Aperçu commission si article en consigne */}
             {commissionPreview && (
               <div className="sale-commission-preview">
-                <div className="commission-row">
-                  <span>Prix de vente</span>
-                  <span>{formatPrice(parseFloat(salePrice))} $</span>
-                </div>
-                <div className="commission-row commission-negative">
-                  <span>Commission {foundItem.consignmentStore} ({commissionPreview.percent}%)</span>
-                  <span>-{formatPrice(commissionPreview.commissionAmount)} $</span>
-                </div>
-                <div className="commission-row commission-total">
-                  <span>Revenu net pour vous</span>
-                  <span>{formatPrice(commissionPreview.netRevenue)} $</span>
-                </div>
+                <div className="commission-row"><span>Prix de vente</span><span>{formatPrice(parseFloat(salePrice))} $</span></div>
+                <div className="commission-row commission-negative"><span>Commission {foundItem.consignmentStore} ({commissionPreview.percent}%)</span><span>-{formatPrice(commissionPreview.commissionAmount)} $</span></div>
+                <div className="commission-row commission-total"><span>Revenu net pour vous</span><span>{formatPrice(commissionPreview.netRevenue)} $</span></div>
               </div>
             )}
 
             <div className="form-group">
-              <label className="form-label">Vendeuse</label>
-              <input
-                type="text"
-                value={sellerName}
-                onChange={(e) => setSellerName(e.target.value)}
-                className="form-input"
-                placeholder="Nom de la vendeuse"
-              />
+              <label className="form-label">Vendeur/vendeuse</label>
+              <input type="text" value={sellerName} onChange={(e) => setSellerName(e.target.value)} className="form-input" placeholder="Nom" />
             </div>
 
             <div className="form-group">
@@ -367,7 +328,7 @@ export default function QuickSale() {
                 value={marketName}
                 onChange={(e) => {
                   setMarketName(e.target.value);
-                  localStorage.setItem('sdl_marketName', e.target.value);
+                  localStorage.setItem('va_marketName', e.target.value);
                 }}
                 className="form-input"
                 placeholder="Ex: Marché Jean-Talon, Facebook, etc."
@@ -376,12 +337,7 @@ export default function QuickSale() {
 
             <div className="form-group">
               <label className="form-label">Date de vente</label>
-              <input
-                type="date"
-                value={saleDate}
-                onChange={(e) => setSaleDate(e.target.value)}
-                className="form-input"
-              />
+              <input type="date" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} className="form-input" />
             </div>
 
             <div className="sale-actions">
@@ -409,7 +365,6 @@ export default function QuickSale() {
         </div>
       )}
 
-      {/* État initial */}
       {!foundItem && !error && !success && (
         <div className="sale-hint">
           <p className="hint-icon">🏷️</p>

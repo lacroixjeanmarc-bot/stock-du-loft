@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ref, onValue, get } from 'firebase/database';
 import { database } from '../firebase';
+import { applyTheme } from '../services/themeService';
 
 const ITEMS_PATH = 'stockduloft/items';
 const PHOTOS_PATH = 'stockduloft/photos';
@@ -38,6 +39,7 @@ export default function Vitrine() {
   const [activePhoto, setActivePhoto] = useState({});
   const [soldDays, setSoldDays] = useState(7);
 
+  // ★ Charger les settings ET appliquer le thème
   useEffect(() => {
     const settingsRef = ref(database, SETTINGS_PATH);
     const unsub = onValue(settingsRef, (snap) => {
@@ -46,6 +48,10 @@ export default function Vitrine() {
         if (val.vitrineSoldDays !== undefined) {
           setSoldDays(val.vitrineSoldDays);
         }
+        // ★ Appliquer le thème sauvegardé
+        if (val.theme) {
+          applyTheme(val.theme);
+        }
       }
     });
     return unsub;
@@ -53,7 +59,6 @@ export default function Vitrine() {
 
   useEffect(() => {
     const itemsRef = ref(database, ITEMS_PATH);
-
     const unsubscribe = onValue(itemsRef, (snapshot) => {
       const data = [];
       if (snapshot.exists()) {
@@ -68,7 +73,6 @@ export default function Vitrine() {
           }
         });
       }
-
       data.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setItems(data);
       setLoading(false);
@@ -88,16 +92,12 @@ export default function Vitrine() {
         }
       });
     });
-
     return unsubscribe;
   }, [soldDays]);
 
   const categories = [...new Set(items.map((i) => i.category).filter(Boolean))].sort();
-
   const filteredItems =
-    categoryFilter === 'all'
-      ? items
-      : items.filter((i) => i.category === categoryFilter);
+    categoryFilter === 'all' ? items : items.filter((i) => i.category === categoryFilter);
 
   const handleItemClick = (itemId) => {
     if (selectedItem === itemId) {
@@ -183,7 +183,11 @@ export default function Vitrine() {
                       {itemPhotos.length > 0 ? (
                         <img src={itemPhotos[0]} alt={item.description} />
                       ) : item.thumbnail ? (
-                        <img src={item.thumbnail} alt={item.description} className="vitrine-thumb-blur" />
+                        <img
+                          src={item.thumbnail}
+                          alt={item.description}
+                          className="vitrine-thumb-blur"
+                        />
                       ) : (
                         <div className="vitrine-card-no-photo">📷</div>
                       )}
@@ -222,17 +226,13 @@ export default function Vitrine() {
                     {itemPhotos.length > 0 && (
                       <div className="vitrine-gallery">
                         <div className="vitrine-gallery-main">
-                          <img
-                            src={itemPhotos[currentPhotoIdx]}
-                            alt={item.description}
-                          />
+                          <img src={itemPhotos[currentPhotoIdx]} alt={item.description} />
                           {item.status === 'sold' && (
                             <div className="vitrine-sold-overlay">
                               <span>VENDU</span>
                             </div>
                           )}
                         </div>
-
                         {itemPhotos.length > 1 && (
                           <div className="vitrine-gallery-thumbs">
                             {itemPhotos.map((photo, idx) => (
@@ -241,7 +241,10 @@ export default function Vitrine() {
                                 className={`vitrine-gallery-thumb ${currentPhotoIdx === idx ? 'active' : ''}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setActivePhoto((prev) => ({ ...prev, [item.id]: idx }));
+                                  setActivePhoto((prev) => ({
+                                    ...prev,
+                                    [item.id]: idx,
+                                  }));
                                 }}
                               >
                                 <img src={photo} alt={`Photo ${idx + 1}`} />
@@ -260,17 +263,14 @@ export default function Vitrine() {
                         {formatPrice(item.price)} $
                       </p>
                       <p className="vitrine-detail-id">#{item.uniqueId}</p>
-
                       {item.category && (
                         <span className="vitrine-card-category">{item.category}</span>
                       )}
-
                       {item.longDescription && (
                         <div className="vitrine-detail-description">
                           <p>{item.longDescription}</p>
                         </div>
                       )}
-
                       {item.status === 'consignment' && item.consignmentStore && (
                         <p className="vitrine-detail-consignment">
                           📍 Disponible chez: {item.consignmentStore}

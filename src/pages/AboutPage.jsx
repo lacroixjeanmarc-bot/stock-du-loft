@@ -1,13 +1,8 @@
 import { useState, useEffect } from 'react';
 import { ref, onValue, update } from 'firebase/database';
 import { database } from '../firebase';
-import {
-  subscribeToStores,
-  addStore,
-  updateStore,
-  deleteStore,
-  subscribeToItems
-} from '../services/inventoryService';
+import { subscribeToStores, addStore, updateStore, deleteStore, subscribeToItems } from '../services/inventoryService';
+import { THEMES, applyTheme } from '../services/themeService';
 
 const SETTINGS_PATH = 'stockduloft/settings';
 
@@ -16,20 +11,8 @@ function formatPrice(price) {
 }
 
 const PLANS = {
-  free: {
-    name: 'Découverte',
-    badge: '🆓',
-    articlesLimit: 25,
-    vitrineLimit: 10,
-    price: null
-  },
-  artisan: {
-    name: 'Artisan',
-    badge: '⭐',
-    articlesLimit: Infinity,
-    vitrineLimit: Infinity,
-    price: { monthly: 12.99, yearly: 100.00 }
-  }
+  free: { name: 'Découverte', badge: '🆓', articlesLimit: 25, vitrineLimit: 10, price: null },
+  artisan: { name: 'Artisan', badge: '⭐', articlesLimit: Infinity, vitrineLimit: Infinity, price: { monthly: 12.99, yearly: 100.00 } }
 };
 
 export default function AboutPage() {
@@ -57,6 +40,9 @@ export default function AboutPage() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
 
+  // ★ Theme
+  const [currentTheme, setCurrentTheme] = useState('dark-copper');
+
   useEffect(() => {
     const settingsRef = ref(database, SETTINGS_PATH);
     const unsub = onValue(settingsRef, (snap) => {
@@ -69,6 +55,10 @@ export default function AboutPage() {
           setSubscription(data.subscription);
         } else {
           setSubscription({ plan: 'free', planType: null, startDate: null, expiryDate: null });
+        }
+        // ★ Theme
+        if (data.theme) {
+          setCurrentTheme(data.theme);
         }
         // Load tax settings
         if (data.taxes) {
@@ -97,6 +87,13 @@ export default function AboutPage() {
     const days = parseInt(value);
     setSoldDays(days);
     await update(ref(database, SETTINGS_PATH), { vitrineSoldDays: days });
+  };
+
+  // ★ Theme handler
+  const handleChangeTheme = async (themeId) => {
+    setCurrentTheme(themeId);
+    applyTheme(themeId);
+    await update(ref(database, SETTINGS_PATH), { theme: themeId });
   };
 
   // ---- Tax Handlers ----
@@ -128,12 +125,11 @@ export default function AboutPage() {
   const totalWithTax = taxPreviewPrice + tpsAmount + tvqAmount;
 
   // ---- Subscription Info ----
-  const currentPlan = PLANS[subscription?.plan || 'free'];
+  const currentPlanData = PLANS[subscription?.plan || 'free'];
   const totalArticles = items.filter((i) => i.status !== 'sold').length;
-  const articlesPercent =
-    currentPlan.articlesLimit === Infinity
-      ? 0
-      : Math.min(100, Math.round((totalArticles / currentPlan.articlesLimit) * 100));
+  const articlesPercent = currentPlanData.articlesLimit === Infinity
+    ? 0
+    : Math.min(100, Math.round((totalArticles / currentPlanData.articlesLimit) * 100));
   const isFreePlan = (subscription?.plan || 'free') === 'free';
 
   const formatDate = (dateStr) => {
@@ -194,22 +190,15 @@ export default function AboutPage() {
   const getSalesReport = () => {
     const [year, month] = reportMonth.split('-').map(Number);
     const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
-    const nextMonth =
-      month === 12
-        ? `${year + 1}-01-01`
-        : `${year}-${String(month + 1).padStart(2, '0')}-01`;
+    const nextMonth = month === 12
+      ? `${year + 1}-01-01`
+      : `${year}-${String(month + 1).padStart(2, '0')}-01`;
 
     const soldItems = items.filter(
-      (item) =>
-        item.status === 'sold' &&
-        item.saleDate &&
-        item.saleDate >= monthStart &&
-        item.saleDate < nextMonth
+      (item) => item.status === 'sold' && item.saleDate && item.saleDate >= monthStart && item.saleDate < nextMonth
     );
-
     const sales = soldItems.filter((i) => !i.isGift);
     const gifts = soldItems.filter((i) => i.isGift);
-
     const totalRevenue = sales.reduce((sum, i) => sum + (i.salePrice || 0), 0);
     const totalCommissions = sales.reduce((sum, i) => sum + (i.commissionAmount || 0), 0);
     const totalTaxes = sales.reduce((sum, i) => {
@@ -219,7 +208,6 @@ export default function AboutPage() {
       return sum;
     }, 0);
 
-    // Par marché / lieu de vente
     const byMarket = {};
     sales.forEach((item) => {
       const market = item.consignmentStoreId
@@ -227,31 +215,23 @@ export default function AboutPage() {
         : item.marketName
           ? `🎪 ${item.marketName}`
           : '🛍️ Vente directe';
-      if (!byMarket[market]) {
-        byMarket[market] = { count: 0, revenue: 0 };
-      }
+      if (!byMarket[market]) { byMarket[market] = { count: 0, revenue: 0 }; }
       byMarket[market].count++;
       byMarket[market].revenue += item.salePrice || 0;
     });
 
-    // Par catégorie
     const byCategory = {};
     sales.forEach((item) => {
       const cat = item.category || 'Sans catégorie';
-      if (!byCategory[cat]) {
-        byCategory[cat] = { count: 0, revenue: 0 };
-      }
+      if (!byCategory[cat]) { byCategory[cat] = { count: 0, revenue: 0 }; }
       byCategory[cat].count++;
       byCategory[cat].revenue += item.salePrice || 0;
     });
 
-    // Par vendeur
     const bySeller = {};
     soldItems.forEach((item) => {
       const seller = item.sellerName || 'Non spécifié';
-      if (!bySeller[seller]) {
-        bySeller[seller] = { count: 0, revenue: 0 };
-      }
+      if (!bySeller[seller]) { bySeller[seller] = { count: 0, revenue: 0 }; }
       bySeller[seller].count++;
       bySeller[seller].revenue += item.salePrice || 0;
     });
@@ -277,10 +257,9 @@ export default function AboutPage() {
   const getMonthReport = () => {
     const [year, month] = reportMonth.split('-').map(Number);
     const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
-    const nextMonth =
-      month === 12
-        ? `${year + 1}-01-01`
-        : `${year}-${String(month + 1).padStart(2, '0')}-01`;
+    const nextMonth = month === 12
+      ? `${year + 1}-01-01`
+      : `${year}-${String(month + 1).padStart(2, '0')}-01`;
 
     const report = {};
     stores.forEach((store) => {
@@ -322,7 +301,6 @@ export default function AboutPage() {
   const monthReport = getMonthReport();
   const hasReportData = monthReport.some((r) => r.itemsSold > 0 || r.itemsInConsignment > 0);
 
-  // ---- Month display helper ----
   const getMonthLabel = () => {
     const [year, month] = reportMonth.split('-').map(Number);
     const d = new Date(year, month - 1);
@@ -340,7 +318,7 @@ export default function AboutPage() {
           <div className="subscription-plan-row">
             <div className="subscription-plan-info">
               <span className="subscription-plan-badge">
-                {currentPlan.badge} {currentPlan.name}
+                {currentPlanData.badge} {currentPlanData.name}
               </span>
               {!isFreePlan && subscription?.planType && (
                 <span className="subscription-plan-type">
@@ -355,7 +333,7 @@ export default function AboutPage() {
               <span>📦 Articles actifs</span>
               <span>
                 {totalArticles}
-                {isFreePlan ? ` / ${currentPlan.articlesLimit}` : ' — Illimité'}
+                {isFreePlan ? ` / ${currentPlanData.articlesLimit}` : ' — Illimité'}
               </span>
             </div>
             {isFreePlan && (
@@ -370,7 +348,7 @@ export default function AboutPage() {
 
           <div className="subscription-detail-row">
             <span>🖼️ Vitrine publique</span>
-            <span>{isFreePlan ? `${currentPlan.vitrineLimit} articles max` : 'Illimitée'}</span>
+            <span>{isFreePlan ? `${currentPlanData.vitrineLimit} articles max` : 'Illimitée'}</span>
           </div>
           <div className="subscription-detail-row">
             <span>📍 Suivi consignes</span>
@@ -399,16 +377,10 @@ export default function AboutPage() {
                 Passez au plan Artisan pour des articles illimités, la vitrine complète, le suivi des consignes et plus encore.
               </p>
               <div className="subscription-upgrade-options">
-                <button
-                  className="btn btn-upgrade btn-full"
-                  onClick={() => { setSelectedPlan('monthly'); setShowUpgradeModal(true); }}
-                >
+                <button className="btn btn-upgrade btn-full" onClick={() => { setSelectedPlan('monthly'); setShowUpgradeModal(true); }}>
                   ⭐ Plan Artisan — 12.99 $/mois
                 </button>
-                <button
-                  className="btn btn-upgrade-yearly btn-full"
-                  onClick={() => { setSelectedPlan('yearly'); setShowUpgradeModal(true); }}
-                >
+                <button className="btn btn-upgrade-yearly btn-full" onClick={() => { setSelectedPlan('yearly'); setShowUpgradeModal(true); }}>
                   💎 Plan Annuel — 100 $/an
                   <span className="upgrade-savings">Économisez 56 $ !</span>
                 </button>
@@ -421,6 +393,35 @@ export default function AboutPage() {
               </button>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ======= THÈME DE COULEUR ======= */}
+      <div className="about-card" style={{ marginBottom: '12px' }}>
+        <h4>🎨 Thème de couleur</h4>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '8px 0 12px' }}>
+          Ce thème s'applique à l'application et à votre vitrine publique.
+        </p>
+        <div className="theme-grid">
+          {Object.entries(THEMES).map(([id, theme]) => (
+            <button
+              key={id}
+              className={`theme-swatch ${currentTheme === id ? 'active' : ''}`}
+              onClick={() => handleChangeTheme(id)}
+              title={theme.name}
+            >
+              <div
+                className="theme-swatch-color"
+                style={{ background: theme.preview }}
+              />
+              <span className="theme-swatch-label">
+                {theme.emoji} {theme.name}
+              </span>
+              {currentTheme === id && (
+                <span className="theme-swatch-check">✓</span>
+              )}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -443,7 +444,6 @@ export default function AboutPage() {
           </p>
         ) : (
           <div className="sales-report">
-            {/* Résumé principal */}
             <div className="sales-summary-grid">
               <div className="sales-summary-card sales-summary-highlight">
                 <span className="sales-summary-value">{formatPrice(salesReport.totalRevenue)} $</span>
@@ -465,7 +465,6 @@ export default function AboutPage() {
               )}
             </div>
 
-            {/* Déductions */}
             {(salesReport.totalCommissions > 0 || salesReport.totalTaxes > 0) && (
               <div className="sales-deductions">
                 {salesReport.totalCommissions > 0 && (
@@ -487,7 +486,6 @@ export default function AboutPage() {
               </div>
             )}
 
-            {/* Par lieu de vente */}
             {salesReport.byMarket.length > 0 && (
               <div className="sales-breakdown">
                 <p className="sales-breakdown-title">Par lieu de vente</p>
@@ -502,7 +500,6 @@ export default function AboutPage() {
               </div>
             )}
 
-            {/* Par catégorie */}
             {salesReport.byCategory.length > 0 && (
               <div className="sales-breakdown">
                 <p className="sales-breakdown-title">Par catégorie</p>
@@ -517,7 +514,6 @@ export default function AboutPage() {
               </div>
             )}
 
-            {/* Par vendeur */}
             {salesReport.bySeller.length > 1 && (
               <div className="sales-breakdown">
                 <p className="sales-breakdown-title">Par vendeur</p>
@@ -539,7 +535,6 @@ export default function AboutPage() {
       <div className="about-card" style={{ marginBottom: '12px' }}>
         <h4>🧾 Taxes de vente</h4>
         <div className="tax-section">
-          {/* Toggle principal */}
           <div className="tax-toggle-row">
             <label className="tax-toggle-label">
               <input
@@ -553,91 +548,37 @@ export default function AboutPage() {
 
           {taxEnabled && (
             <>
-              {/* Taux */}
               <div className="store-form-row" style={{ marginTop: '12px' }}>
                 <div className="form-group" style={{ flex: 1 }}>
                   <label className="form-label">TPS (%)</label>
-                  <input
-                    type="number"
-                    value={tpsRate}
-                    onChange={(e) => setTpsRate(e.target.value)}
-                    onBlur={handleSaveTaxSettings}
-                    className="form-input"
-                    step="0.001"
-                    min="0"
-                    max="20"
-                    inputMode="decimal"
-                  />
+                  <input type="number" value={tpsRate} onChange={(e) => setTpsRate(e.target.value)} onBlur={handleSaveTaxSettings} className="form-input" step="0.001" min="0" max="20" inputMode="decimal" />
                 </div>
                 <div className="form-group" style={{ flex: 1 }}>
                   <label className="form-label">TVQ (%)</label>
-                  <input
-                    type="number"
-                    value={tvqRate}
-                    onChange={(e) => setTvqRate(e.target.value)}
-                    onBlur={handleSaveTaxSettings}
-                    className="form-input"
-                    step="0.001"
-                    min="0"
-                    max="20"
-                    inputMode="decimal"
-                  />
+                  <input type="number" value={tvqRate} onChange={(e) => setTvqRate(e.target.value)} onBlur={handleSaveTaxSettings} className="form-input" step="0.001" min="0" max="20" inputMode="decimal" />
                 </div>
               </div>
 
-              {/* Numéros de taxes (optionnels) */}
               <div className="form-group" style={{ marginTop: '8px' }}>
                 <label className="form-label">Numéro TPS (optionnel)</label>
-                <input
-                  type="text"
-                  value={tpsNumber}
-                  onChange={(e) => setTpsNumber(e.target.value)}
-                  onBlur={handleSaveTaxSettings}
-                  className="form-input"
-                  placeholder="Ex: 123456789RT0001"
-                />
+                <input type="text" value={tpsNumber} onChange={(e) => setTpsNumber(e.target.value)} onBlur={handleSaveTaxSettings} className="form-input" placeholder="Ex: 123456789RT0001" />
               </div>
               <div className="form-group">
                 <label className="form-label">Numéro TVQ (optionnel)</label>
-                <input
-                  type="text"
-                  value={tvqNumber}
-                  onChange={(e) => setTvqNumber(e.target.value)}
-                  onBlur={handleSaveTaxSettings}
-                  className="form-input"
-                  placeholder="Ex: 1234567890TQ0001"
-                />
+                <input type="text" value={tvqNumber} onChange={(e) => setTvqNumber(e.target.value)} onBlur={handleSaveTaxSettings} className="form-input" placeholder="Ex: 1234567890TQ0001" />
               </div>
 
-              {/* Aperçu */}
               <div className="tax-preview">
                 <p className="tax-preview-title">Aperçu sur un article à 50.00 $ :</p>
-                <div className="tax-preview-row">
-                  <span>Prix</span>
-                  <span>50.00 $</span>
-                </div>
-                <div className="tax-preview-row">
-                  <span>TPS ({tpsRate}%)</span>
-                  <span>{tpsAmount.toFixed(2)} $</span>
-                </div>
-                <div className="tax-preview-row">
-                  <span>TVQ ({tvqRate}%)</span>
-                  <span>{tvqAmount.toFixed(2)} $</span>
-                </div>
-                <div className="tax-preview-row tax-preview-total">
-                  <span>Total</span>
-                  <span>{totalWithTax.toFixed(2)} $</span>
-                </div>
+                <div className="tax-preview-row"><span>Prix</span><span>50.00 $</span></div>
+                <div className="tax-preview-row"><span>TPS ({tpsRate}%)</span><span>{tpsAmount.toFixed(2)} $</span></div>
+                <div className="tax-preview-row"><span>TVQ ({tvqRate}%)</span><span>{tvqAmount.toFixed(2)} $</span></div>
+                <div className="tax-preview-row tax-preview-total"><span>Total</span><span>{totalWithTax.toFixed(2)} $</span></div>
               </div>
             </>
           )}
 
-          {/* Bouton info */}
-          <button
-            className="btn btn-small btn-secondary btn-full"
-            style={{ marginTop: '12px' }}
-            onClick={() => setShowTaxInfo(!showTaxInfo)}
-          >
+          <button className="btn btn-small btn-secondary btn-full" style={{ marginTop: '12px' }} onClick={() => setShowTaxInfo(!showTaxInfo)}>
             {showTaxInfo ? '▲ Masquer' : '📋 Ce que vous devez savoir sur les taxes'}
           </button>
 
@@ -646,77 +587,34 @@ export default function AboutPage() {
               <h5>📋 Taxes de vente — Ce que vous devez savoir</h5>
               <div className="tax-info-block">
                 <p className="tax-info-subtitle">Suis-je obligé de percevoir les taxes ?</p>
-                <p>
-                  Au Canada, si vos ventes totales sont inférieures à 30 000 $ sur quatre trimestres
-                  civils consécutifs, vous êtes considéré « petit fournisseur » et vous n'êtes{' '}
-                  <strong>pas obligé</strong> de vous inscrire aux taxes (TPS/TVH au fédéral et TVQ au
-                  Québec).
-                </p>
+                <p>Au Canada, si vos ventes totales sont inférieures à 30 000 $ sur quatre trimestres civils consécutifs, vous êtes considéré « petit fournisseur » et vous n'êtes pas <strong>obligé</strong> de vous inscrire aux taxes (TPS/TVH au fédéral et TVQ au Québec).</p>
               </div>
               <div className="tax-info-block">
                 <p className="tax-info-subtitle">Avantages de s'inscrire volontairement</p>
-                <p>
-                  Même sous le seuil de 30 000 $, l'inscription volontaire peut être avantageuse. Vous
-                  pouvez réclamer des crédits de taxe sur les intrants (CTI) pour récupérer la TPS et la
-                  TVQ payées sur vos achats de matériaux, fournitures, outils et équipement. Pour certains
-                  artisans, ces remboursements peuvent être significatifs.
-                </p>
+                <p>Même sous le seuil de 30 000 $, l'inscription volontaire peut être avantageuse. Vous pouvez réclamer des crédits de taxe sur les intrants (CTI) pour récupérer la TPS et la TVQ payées sur vos achats de matériaux, fournitures, outils et équipement.</p>
               </div>
               <div className="tax-info-block">
                 <p className="tax-info-subtitle">Inconvénients</p>
-                <p>
-                  Si vous vous inscrivez, vous devez percevoir les taxes sur toutes vos ventes, produire
-                  des déclarations de taxes régulièrement, et remettre les montants perçus aux
-                  gouvernements. Cela ajoute de la comptabilité et de l'administration. Vos prix peuvent
-                  aussi paraître plus élevés face à des artisans non inscrits.
-                </p>
+                <p>Si vous vous inscrivez, vous devez percevoir les taxes sur toutes vos ventes, produire des déclarations régulièrement, et remettre les montants perçus. Vos prix peuvent aussi paraître plus élevés face à des artisans non inscrits.</p>
               </div>
               <div className="tax-info-block">
                 <p className="tax-info-subtitle">Si vous dépassez 30 000 $</p>
-                <p>
-                  Dès que vos ventes dépassent 30 000 $ au cours d'un seul trimestre civil ou sur quatre
-                  trimestres consécutifs, vous devez vous inscrire dans les 29 jours suivants et commencer
-                  à percevoir les taxes. Il est important de surveiller vos ventes pour ne pas manquer ce
-                  seuil.
-                </p>
+                <p>Dès que vos ventes dépassent 30 000 $, vous devez vous inscrire dans les 29 jours suivants et commencer à percevoir les taxes.</p>
               </div>
               <div className="tax-info-block">
                 <p className="tax-info-subtitle">Taux au Québec</p>
-                <p>
-                  TPS (fédéral) : 5 % — TVQ (Québec) : 9,975 %. La TVQ se calcule sur le prix avant TPS
-                  (et non sur le prix + TPS). Le taux combiné effectif est d'environ 14,975 %.
-                </p>
+                <p>TPS (fédéral) : 5 % — TVQ (Québec) : 9,975 %. Le taux combiné effectif est d'environ 14,975 %.</p>
               </div>
               <div className="tax-info-block">
                 <p className="tax-info-subtitle">Ressources officielles</p>
                 <p>
-                  🔗{' '}
-                  <a
-                    href="https://www.canada.ca/fr/agence-revenu/services/impot/entreprises/sujets/tps-tvh-entreprises/compte-tps-tvh/inscrire-compte.html"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Agence du revenu du Canada — Inscription TPS/TVH
-                  </a>
+                  🔗 <a href="https://www.canada.ca/fr/agence-revenu/services/impot/entreprises/sujets/tps-tvh-entreprises/compte-tps-tvh/inscrire-compte.html" target="_blank" rel="noopener noreferrer">Agence du revenu du Canada — Inscription TPS/TVH</a>
                   <br />
-                  🔗{' '}
-                  <a
-                    href="https://www.revenuquebec.ca/fr/entreprises/taxes/tpstvh-et-tvq/inscription-aux-fichiers-de-la-tps-et-de-la-tvq/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Revenu Québec — Inscription TPS et TVQ
-                  </a>
+                  🔗 <a href="https://www.revenuquebec.ca/fr/entreprises/taxes/tpstvh-et-tvq/inscription-aux-fichiers-de-la-tps-et-de-la-tvq/" target="_blank" rel="noopener noreferrer">Revenu Québec — Inscription TPS et TVQ</a>
                 </p>
               </div>
               <div className="tax-info-disclaimer">
-                <p>
-                  ⚠️ <strong>Avis important :</strong> Cette information est fournie à titre indicatif
-                  seulement et ne constitue pas un avis fiscal ou juridique. Chaque situation est unique.
-                  Consultez un comptable ou un professionnel qualifié pour déterminer ce qui convient à
-                  votre situation. Cette application est un outil de gestion d'inventaire et n'assume
-                  aucune responsabilité en matière de conformité fiscale.
-                </p>
+                <p>⚠️ <strong>Avis important :</strong> Cette information est fournie à titre indicatif seulement. Consultez un comptable ou un professionnel qualifié.</p>
               </div>
             </div>
           )}
@@ -738,56 +636,21 @@ export default function AboutPage() {
                   <div className="store-edit-form">
                     <div className="form-group">
                       <label className="form-label">Nom</label>
-                      <input
-                        type="text"
-                        value={storeForm.name}
-                        onChange={(e) => setStoreForm((f) => ({ ...f, name: e.target.value }))}
-                        className="form-input"
-                      />
+                      <input type="text" value={storeForm.name} onChange={(e) => setStoreForm((f) => ({ ...f, name: e.target.value }))} className="form-input" />
                     </div>
                     <div className="store-form-row">
                       <div className="form-group" style={{ flex: 1 }}>
                         <label className="form-label">Commission (%)</label>
-                        <input
-                          type="number"
-                          value={storeForm.commissionPercent}
-                          onChange={(e) =>
-                            setStoreForm((f) => ({ ...f, commissionPercent: e.target.value }))
-                          }
-                          className="form-input"
-                          step="0.5"
-                          min="0"
-                          max="100"
-                          inputMode="decimal"
-                          placeholder="0"
-                        />
+                        <input type="number" value={storeForm.commissionPercent} onChange={(e) => setStoreForm((f) => ({ ...f, commissionPercent: e.target.value }))} className="form-input" step="0.5" min="0" max="100" inputMode="decimal" placeholder="0" />
                       </div>
                       <div className="form-group" style={{ flex: 1 }}>
                         <label className="form-label">Loyer ($/mois)</label>
-                        <input
-                          type="number"
-                          value={storeForm.locationFee}
-                          onChange={(e) =>
-                            setStoreForm((f) => ({ ...f, locationFee: e.target.value }))
-                          }
-                          className="form-input"
-                          step="1"
-                          min="0"
-                          inputMode="decimal"
-                          placeholder="0"
-                        />
+                        <input type="number" value={storeForm.locationFee} onChange={(e) => setStoreForm((f) => ({ ...f, locationFee: e.target.value }))} className="form-input" step="1" min="0" inputMode="decimal" placeholder="0" />
                       </div>
                     </div>
                     <div className="store-edit-actions">
-                      <button className="btn btn-small btn-save" onClick={() => handleSaveStore(store.id)}>
-                        ✓ Sauvegarder
-                      </button>
-                      <button
-                        className="btn btn-small btn-secondary"
-                        onClick={() => setEditingStore(null)}
-                      >
-                        Annuler
-                      </button>
+                      <button className="btn btn-small btn-save" onClick={() => handleSaveStore(store.id)}>✓ Sauvegarder</button>
+                      <button className="btn btn-small btn-secondary" onClick={() => setEditingStore(null)}>Annuler</button>
                     </div>
                   </div>
                 ) : (
@@ -795,46 +658,18 @@ export default function AboutPage() {
                     <div className="store-header">
                       <span className="store-name">{store.name}</span>
                       <div className="store-actions-btns">
-                        <button
-                          className="btn btn-small btn-edit"
-                          onClick={() => handleEditStore(store)}
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          className="btn btn-small btn-delete"
-                          onClick={() => handleDeleteStore(store)}
-                        >
-                          🗑️
-                        </button>
+                        <button className="btn btn-small btn-edit" onClick={() => handleEditStore(store)}>✏️</button>
+                        <button className="btn btn-small btn-delete" onClick={() => handleDeleteStore(store)}>🗑️</button>
                       </div>
                     </div>
                     <div className="store-details">
-                      {store.commissionPercent > 0 && (
-                        <span className="store-tag store-tag-commission">
-                          {store.commissionPercent}% commission
-                        </span>
-                      )}
-                      {store.locationFee > 0 && (
-                        <span className="store-tag store-tag-location">
-                          {formatPrice(store.locationFee)} $/mois loyer
-                        </span>
-                      )}
-                      {!store.commissionPercent && !store.locationFee && (
-                        <span className="store-tag">Aucun frais configuré</span>
-                      )}
+                      {store.commissionPercent > 0 && <span className="store-tag store-tag-commission">{store.commissionPercent}% commission</span>}
+                      {store.locationFee > 0 && <span className="store-tag store-tag-location">{formatPrice(store.locationFee)} $/mois loyer</span>}
+                      {!store.commissionPercent && !store.locationFee && <span className="store-tag">Aucun frais configuré</span>}
                     </div>
-                    {items.filter(
-                      (i) => i.status === 'consignment' && i.consignmentStoreId === store.id
-                    ).length > 0 && (
+                    {items.filter((i) => i.status === 'consignment' && i.consignmentStoreId === store.id).length > 0 && (
                       <p className="store-consigned-count">
-                        📦{' '}
-                        {
-                          items.filter(
-                            (i) => i.status === 'consignment' && i.consignmentStoreId === store.id
-                          ).length
-                        }{' '}
-                        article(s) en consigne
+                        📦 {items.filter((i) => i.status === 'consignment' && i.consignmentStoreId === store.id).length} article(s) en consigne
                       </p>
                     )}
                   </div>
@@ -848,76 +683,25 @@ export default function AboutPage() {
           <div className="store-add-form">
             <div className="form-group">
               <label className="form-label">Nom du magasin</label>
-              <input
-                type="text"
-                value={storeForm.name}
-                onChange={(e) => setStoreForm((f) => ({ ...f, name: e.target.value }))}
-                className="form-input"
-                placeholder="Ex: SF Studios"
-                autoFocus
-              />
+              <input type="text" value={storeForm.name} onChange={(e) => setStoreForm((f) => ({ ...f, name: e.target.value }))} className="form-input" placeholder="Ex: SF Studios" autoFocus />
             </div>
             <div className="store-form-row">
               <div className="form-group" style={{ flex: 1 }}>
                 <label className="form-label">Commission (%)</label>
-                <input
-                  type="number"
-                  value={storeForm.commissionPercent}
-                  onChange={(e) =>
-                    setStoreForm((f) => ({ ...f, commissionPercent: e.target.value }))
-                  }
-                  className="form-input"
-                  step="0.5"
-                  min="0"
-                  max="100"
-                  inputMode="decimal"
-                  placeholder="Ex: 30"
-                />
+                <input type="number" value={storeForm.commissionPercent} onChange={(e) => setStoreForm((f) => ({ ...f, commissionPercent: e.target.value }))} className="form-input" step="0.5" min="0" max="100" inputMode="decimal" placeholder="Ex: 30" />
               </div>
               <div className="form-group" style={{ flex: 1 }}>
                 <label className="form-label">Loyer ($/mois)</label>
-                <input
-                  type="number"
-                  value={storeForm.locationFee}
-                  onChange={(e) =>
-                    setStoreForm((f) => ({ ...f, locationFee: e.target.value }))
-                  }
-                  className="form-input"
-                  step="1"
-                  min="0"
-                  inputMode="decimal"
-                  placeholder="Ex: 50"
-                />
+                <input type="number" value={storeForm.locationFee} onChange={(e) => setStoreForm((f) => ({ ...f, locationFee: e.target.value }))} className="form-input" step="1" min="0" inputMode="decimal" placeholder="Ex: 50" />
               </div>
             </div>
             <div className="store-edit-actions">
-              <button
-                className="btn btn-small btn-save"
-                onClick={handleAddStore}
-                disabled={!storeForm.name.trim()}
-              >
-                ✓ Ajouter
-              </button>
-              <button
-                className="btn btn-small btn-secondary"
-                onClick={() => {
-                  setShowAddStore(false);
-                  setStoreForm({ name: '', commissionPercent: '', locationFee: '' });
-                }}
-              >
-                Annuler
-              </button>
+              <button className="btn btn-small btn-save" onClick={handleAddStore} disabled={!storeForm.name.trim()}>✓ Ajouter</button>
+              <button className="btn btn-small btn-secondary" onClick={() => { setShowAddStore(false); setStoreForm({ name: '', commissionPercent: '', locationFee: '' }); }}>Annuler</button>
             </div>
           </div>
         ) : (
-          <button
-            className="btn btn-small btn-add-store"
-            onClick={() => {
-              setShowAddStore(true);
-              setStoreForm({ name: '', commissionPercent: '', locationFee: '' });
-            }}
-            style={{ marginTop: '10px' }}
-          >
+          <button className="btn btn-small btn-add-store" onClick={() => { setShowAddStore(true); setStoreForm({ name: '', commissionPercent: '', locationFee: '' }); }} style={{ marginTop: '10px' }}>
             ➕ Ajouter un magasin
           </button>
         )}
@@ -928,13 +712,9 @@ export default function AboutPage() {
         <h4>📊 Rapport consignes</h4>
         <div className="form-group" style={{ marginTop: '10px' }}>
           <label className="form-label">Mois</label>
-          <input
-            type="month"
-            value={reportMonth}
-            onChange={(e) => setReportMonth(e.target.value)}
-            className="form-input"
-          />
+          <input type="month" value={reportMonth} onChange={(e) => setReportMonth(e.target.value)} className="form-input" />
         </div>
+
         {!hasReportData ? (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '10px' }}>
             Aucune activité de consigne pour ce mois
@@ -954,14 +734,8 @@ export default function AboutPage() {
                   )}
                   {r.itemsSold > 0 && (
                     <>
-                      <div className="report-row">
-                        <span>🏷️ Articles vendus</span>
-                        <span>{r.itemsSold}</span>
-                      </div>
-                      <div className="report-row">
-                        <span>💰 Total ventes</span>
-                        <span>{formatPrice(r.totalSales)} $</span>
-                      </div>
+                      <div className="report-row"><span>🏷️ Articles vendus</span><span>{r.itemsSold}</span></div>
+                      <div className="report-row"><span>💰 Total ventes</span><span>{formatPrice(r.totalSales)} $</span></div>
                       {r.commissionPercent > 0 && (
                         <div className="report-row report-row-negative">
                           <span>📉 Commission ({r.commissionPercent}%)</span>
@@ -991,11 +765,7 @@ export default function AboutPage() {
         <h4>⚙️ Paramètres Vitrine</h4>
         <div className="form-group" style={{ marginTop: '10px' }}>
           <label className="form-label">Afficher les articles vendus pendant :</label>
-          <select
-            value={soldDays}
-            onChange={(e) => handleChangeDays(e.target.value)}
-            className="form-input"
-          >
+          <select value={soldDays} onChange={(e) => handleChangeDays(e.target.value)} className="form-input">
             <option value={0}>Ne pas afficher</option>
             <option value={3}>3 jours</option>
             <option value={7}>7 jours (1 semaine)</option>
@@ -1016,13 +786,10 @@ export default function AboutPage() {
         <h3>✂️ Vitrine Artisan</h3>
         <p className="about-version">Version 1.3</p>
         <p className="about-description">
-          Application de gestion d'inventaire conçue pour les artisans et créateurs. Gérez vos articles,
-          suivez vos consignes et enregistrez vos ventes en toute simplicité.
+          Application de gestion d'inventaire conçue pour les artisans et créateurs. Gérez vos articles, suivez vos consignes et enregistrez vos ventes en toute simplicité.
         </p>
         <div className="about-author">
-          <p>
-            Créé par <strong>Jean-Marc Lacroix</strong>
-          </p>
+          <p>Créé par <strong>Jean-Marc Lacroix</strong></p>
           <p>© 2026 — Tous droits réservés</p>
           <p style={{ marginTop: '12px' }}>💬 Commentaires et suggestions bienvenus</p>
           <a href="mailto:lacroix.jeanmarc@gmail.com" className="about-email">
@@ -1036,54 +803,32 @@ export default function AboutPage() {
         <div className="modal-overlay" onClick={() => setShowUpgradeModal(false)}>
           <div className="modal-content upgrade-modal" onClick={(e) => e.stopPropagation()}>
             <h3>🎨 Passer au Plan Artisan</h3>
-
             <div className="upgrade-modal-plan-selected">
-              {selectedPlan === 'monthly'
-                ? '⭐ Plan mensuel — 12,99 $ / mois'
-                : '💎 Plan annuel — 100,00 $ / an (économisez 56 $!)'}
+              {selectedPlan === 'monthly' ? '⭐ Plan mensuel — 12,99 $ / mois' : '💎 Plan annuel — 100,00 $ / an (économisez 56 $!)'}
             </div>
-
             <div className="upgrade-modal-steps">
               <p className="upgrade-modal-steps-title">Pour activer votre abonnement :</p>
-
               <div className="upgrade-modal-step">
                 <span className="upgrade-modal-step-number">1</span>
-                <span>
-                  Envoyez un virement Interac de{' '}
-                  <strong>{selectedPlan === 'monthly' ? '12,99 $' : '100,00 $'}</strong> à :
-                </span>
+                <span>Envoyez un virement Interac de <strong>{selectedPlan === 'monthly' ? '12,99 $' : '100,00 $'}</strong> à :</span>
               </div>
-
               <div className="upgrade-modal-email-box">
                 <span className="upgrade-modal-email-icon">📧</span>
                 <span className="upgrade-modal-email-address">lacroix.jeanmarc@gmail.com</span>
               </div>
-
               <div className="upgrade-modal-step">
                 <span className="upgrade-modal-step-number">2</span>
-                <span>
-                  Dans le message du virement, indiquez le <strong>nom de votre entreprise</strong>
-                </span>
+                <span>Dans le message du virement, indiquez le <strong>nom de votre entreprise</strong></span>
               </div>
-
               <div className="upgrade-modal-step">
                 <span className="upgrade-modal-step-number">3</span>
-                <span>
-                  Votre plan sera activé dans les <strong>24 heures</strong> suivant la réception du
-                  paiement
-                </span>
+                <span>Votre plan sera activé dans les <strong>24 heures</strong> suivant la réception du paiement</span>
               </div>
             </div>
-
             <div className="upgrade-modal-note">
               💡 Une confirmation par courriel vous sera envoyée dès l'activation.
             </div>
-
-            <button
-              className="btn btn-secondary btn-full"
-              onClick={() => setShowUpgradeModal(false)}
-              style={{ marginTop: '16px' }}
-            >
+            <button className="btn btn-secondary btn-full" onClick={() => setShowUpgradeModal(false)} style={{ marginTop: '16px' }}>
               Fermer
             </button>
           </div>

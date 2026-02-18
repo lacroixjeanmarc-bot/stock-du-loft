@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
-
 export default defineConfig({
   plugins: [
     react(),
@@ -9,13 +8,14 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Stock du Loft',
-        short_name: 'StockLoft',
-        description: "Gestion d'inventaire pour L'Atelier du Loft",
+        name: 'Vitrine Artisan',
+        short_name: 'Vitrine',
+        description: "Gestion d'inventaire pour les artisans du Québec",
         theme_color: '#1a1a2e',
         background_color: '#1a1a2e',
         display: 'standalone',
         orientation: 'portrait',
+        start_url: '/app',
         icons: [
           {
             src: 'pwa-192x192.png',

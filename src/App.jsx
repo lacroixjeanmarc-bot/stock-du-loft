@@ -1,5 +1,9 @@
+import { useState, useEffect } from 'react';
 import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
+import { ref, onValue } from 'firebase/database';
+import { database } from './firebase';
 import { AuthProvider, useAuth } from './hooks/useAuth';
+import { applyTheme } from './services/themeService';
 import InventoryList from './pages/InventoryList';
 import AddItem from './pages/AddItem';
 import QuickSale from './pages/QuickSale';
@@ -9,9 +13,22 @@ import AdminPage from './pages/AdminPage';
 import LoginPage from './pages/LoginPage';
 import { isSuperAdmin } from './services/adminService';
 
+const SETTINGS_PATH = 'stockduloft/settings';
+
 function AppContent() {
   const { user, logout } = useAuth();
   const location = useLocation();
+
+  // ★ Appliquer le thème sauvegardé quand l'utilisateur est connecté
+  useEffect(() => {
+    const settingsRef = ref(database, `${SETTINGS_PATH}/theme`);
+    const unsub = onValue(settingsRef, (snap) => {
+      if (snap.exists()) {
+        applyTheme(snap.val());
+      }
+    });
+    return unsub;
+  }, []);
 
   // Vitrine publique — pas besoin de login
   if (location.pathname === '/vitrine') {
@@ -28,8 +45,7 @@ function AppContent() {
       <header className="app-header">
         <div className="header-content">
           <h1 className="app-title">
-            <span className="title-icon">✂️</span>
-            Stock du Loft
+            <span className="title-icon">✂️</span> Stock du Loft
           </h1>
           <div className="header-user">
             <span className="user-name">{user.displayName?.split(' ')[0]}</span>

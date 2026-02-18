@@ -1,10 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { addItem, getItemByUniqueId, getNextUniqueId } from '../services/inventoryService';
+import { useAuth } from '../hooks/useAuth';
 import AiSuggestButton from '../components/AiSuggestButton';
 
 export default function AddItem() {
   const navigate = useNavigate();
+  const { tenant } = useAuth();
+  const prefix = tenant?.prefix || 'ART';
   const fileInputRef = useRef(null);
   const [formData, setFormData] = useState({
     uniqueId: '',
@@ -22,11 +25,11 @@ export default function AddItem() {
 
   // Charger le prochain numéro disponible au chargement
   useEffect(() => {
-    getNextUniqueId('ADL').then((nextId) => {
+    getNextUniqueId(prefix).then((nextId) => {
       setFormData((prev) => ({ ...prev, uniqueId: nextId }));
       setSuggestedId(nextId);
     });
-  }, []);
+  }, [prefix]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -72,7 +75,6 @@ export default function AddItem() {
     e.preventDefault();
     setError('');
 
-    // Validation
     if (!formData.uniqueId.trim()) {
       setError('Le numéro unique est requis');
       return;
@@ -82,10 +84,9 @@ export default function AddItem() {
       return;
     }
 
-    // Vérifier si le numéro existe déjà
     const existing = await getItemByUniqueId(formData.uniqueId);
     if (existing) {
-      const nextId = await getNextUniqueId('ADL');
+      const nextId = await getNextUniqueId(prefix);
       setSuggestedId(nextId);
       setError(`Le numéro "${formData.uniqueId.toUpperCase()}" existe déjà !`);
       return;
@@ -102,9 +103,7 @@ export default function AddItem() {
         itemDate: formData.itemDate,
         photoFile
       });
-
-      // Succès — retour à l'inventaire
-      navigate('/');
+      navigate('/app');
     } catch (err) {
       console.error('Erreur:', err);
       setError('Erreur lors de la sauvegarde. Réessayez.');
@@ -142,7 +141,7 @@ export default function AddItem() {
           <p className="photo-hint">📸 Photo principale — vous pourrez ajouter d'autres photos en modifiant l'article</p>
         </div>
 
-        {/* Bouton AI — apparaît après la prise de photo */}
+        {/* Bouton AI */}
         {photoPreview && (
           <AiSuggestButton
             imageBase64={photoPreview}
@@ -158,7 +157,7 @@ export default function AddItem() {
             name="uniqueId"
             value={formData.uniqueId}
             onChange={handleChange}
-            placeholder="Ex: ADL-001"
+            placeholder={`Ex: ${prefix}-001`}
             className="form-input"
             autoComplete="off"
             style={{ textTransform: 'uppercase' }}
@@ -261,7 +260,7 @@ export default function AddItem() {
           <button
             type="button"
             className="btn btn-secondary btn-full"
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/app')}
           >
             Annuler
           </button>
