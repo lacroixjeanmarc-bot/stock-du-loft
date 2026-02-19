@@ -22,7 +22,7 @@ function AppContent() {
   const { user, tenant, needsOnboarding, logout } = useAuth();
   const location = useLocation();
 
-  // â Appliquer le thÃ¨me sauvegardÃ© quand l'utilisateur est connectÃ©
+  // ★ Appliquer le thème sauvegardé quand l'utilisateur est connecté
   useEffect(() => {
     if (!user) return;
     const settingsRef = ref(database, `${SETTINGS_PATH}/theme`);
@@ -47,7 +47,7 @@ function AppContent() {
         <Route path="/vitrine" element={
           <div className="vitrine">
             <div className="vitrine-empty">
-              <p>ð</p>
+              <p>🔗</p>
               <p>Ajoutez un slug de boutique dans l'URL</p>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '8px' }}>
                 Ex: vitrineartisan.ca/vitrine/mon-atelier
@@ -59,7 +59,7 @@ function AppContent() {
     );
   }
 
-  // ======= /app â BESOIN DE LOGIN =======
+  // ======= /app — BESOIN DE LOGIN =======
   if (!user) {
     return <LoginPage />;
   }
@@ -85,26 +85,26 @@ function AppContent() {
 
           <nav className="header-nav">
             <NavLink to="/app" end className={({ isActive }) => `header-nav-link ${isActive ? 'active' : ''}`}>
-              <span className="nav-icon">ð¦</span>
+              <span className="nav-icon">📦</span>
               <span className="nav-text">Inventaire</span>
             </NavLink>
             <NavLink to="/app/sale" className={({ isActive }) => `header-nav-link ${isActive ? 'active' : ''}`}>
-              <span className="nav-icon">ð°</span>
+              <span className="nav-icon">💰</span>
               <span className="nav-text">Vente</span>
             </NavLink>
             <NavLink to="/app/add" className={({ isActive }) => `header-nav-link ${isActive ? 'active' : ''}`}>
-              <span className="nav-icon">â</span>
+              <span className="nav-icon">➕</span>
               <span className="nav-text">Ajouter</span>
             </NavLink>
             <NavLink to="/app/about" className={({ isActive }) => `header-nav-link ${isActive ? 'active' : ''}`}>
-              <span className="nav-icon">âï¸</span>
-              <span className="nav-text">ParamÃ¨tres</span>
+              <span className="nav-icon">⚙️</span>
+              <span className="nav-text">Paramètres</span>
             </NavLink>
           </nav>
 
           <div className="header-user">
             <span className="user-name">{user.displayName?.split(' ')[0]}</span>
-            <button onClick={logout} className="btn-logout" title="DÃ©connexion">â</button>
+            <button onClick={logout} className="btn-logout" title="Déconnexion">↗</button>
           </div>
         </div>
       </header>
