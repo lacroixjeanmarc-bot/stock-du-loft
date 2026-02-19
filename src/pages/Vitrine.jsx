@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { ref, onValue, get } from 'firebase/database';
 import { database } from '../firebase';
-import { applyTheme } from '../services/themeService';
+import { getUidBySlug, applyTheme } from '../services/tenantService';
 
-const ITEMS_PATH = 'stockduloft/items';
-const PHOTOS_PATH = 'stockduloft/photos';
-const SETTINGS_PATH = 'stockduloft/settings';
 const MAX_EXTRA_PHOTOS = 4;
 
 function formatPrice(price) {
@@ -31,34 +29,88 @@ function extractPhotos(photoData) {
 }
 
 export default function Vitrine() {
+  const { slug } = useParams();
+  const [tenantUid, setTenantUid] = useState(null);
+  const [tenantProfile, setTenantProfile] = useState(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [selectedItem, setSelectedItem] = useState(null);
   const [photos, setPhotos] = useState({});
   const [activePhoto, setActivePhoto] = useState({});
   const [soldDays, setSoldDays] = useState(7);
 
-  // ★ Charger les settings ET appliquer le thème
+  // ★ Étape 1: Résoudre le slug → UID
   useEffect(() => {
-    const settingsRef = ref(database, SETTINGS_PATH);
-    const unsub = onValue(settingsRef, (snap) => {
+    if (!slug) {
+      setNotFound(true);
+      setLoading(false);
+      return;
+    }
+
+    async function resolveSlug() {
+      try {
+        const uid = await getUidBySlug(slug);
+        if (uid) {
+          setTenantUid(uid);
+        } else {
+          setNotFound(true);
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error('Erreur résolution slug:', err);
+        setNotFound(true);
+        setLoading(false);
+      }
+    }
+
+    resolveSlug();
+  }, [slug]);
+
+  // ★ Étape 2: Charger le profil et les settings du tenant
+  useEffect(() => {
+    if (!tenantUid) return;
+
+    // Profil
+    const profileRef = ref(database, `tenants/${tenantUid}/profile`);
+    const unsubProfile = onValue(profileRef, (snap) => {
+      if (snap.exists()) {
+        setTenantProfile(snap.val());
+      }
+    });
+
+    // Settings + thème
+    const settingsRef = ref(database, `tenants/${tenantUid}/settings`);
+    const unsubSettings = onValue(settingsRef, (snap) => {
       if (snap.exists()) {
         const val = snap.val();
         if (val.vitrineSoldDays !== undefined) {
           setSoldDays(val.vitrineSoldDays);
         }
-        // ★ Appliquer le thème sauvegardé
-        if (val.theme) {
-          applyTheme(val.theme);
-        }
       }
     });
-    return unsub;
-  }, []);
 
+    // Thème depuis le profil
+    const themeRef = ref(database, `tenants/${tenantUid}/profile/theme`);
+    const unsubTheme = onValue(themeRef, (snap) => {
+      if (snap.exists()) {
+        applyTheme(snap.val());
+      }
+    });
+
+    return () => {
+      unsubProfile();
+      unsubSettings();
+      unsubTheme();
+    };
+  }, [tenantUid]);
+
+  // ★ Étape 3: Charger les items du tenant
   useEffect(() => {
-    const itemsRef = ref(database, ITEMS_PATH);
+    if (!tenantUid) return;
+
+    const itemsRef = ref(database, `tenants/${tenantUid}/items`);
     const unsubscribe = onValue(itemsRef, (snapshot) => {
       const data = [];
       if (snapshot.exists()) {
@@ -77,10 +129,11 @@ export default function Vitrine() {
       setItems(data);
       setLoading(false);
 
+      // Charger les photos séparément
       data.forEach(async (item) => {
         if (item.hasPhoto && !item.photoBase64) {
           try {
-            const photoRef = ref(database, `${PHOTOS_PATH}/${item.id}`);
+            const photoRef = ref(database, `tenants/${tenantUid}/photos/${item.id}`);
             const snap = await get(photoRef);
             if (snap.exists()) {
               const allPhotos = extractPhotos(snap.val());
@@ -93,7 +146,7 @@ export default function Vitrine() {
       });
     });
     return unsubscribe;
-  }, [soldDays]);
+  }, [tenantUid, soldDays]);
 
   const categories = [...new Set(items.map((i) => i.category).filter(Boolean))].sort();
   const filteredItems =
@@ -114,6 +167,25 @@ export default function Vitrine() {
     return [];
   };
 
+  // ★ Page non trouvée
+  if (notFound) {
+    return (
+      <div className="vitrine">
+        <div className="vitrine-empty">
+          <p>🔍</p>
+          <p>Vitrine introuvable</p>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+            L'adresse <strong>/vitrine/{slug}</strong> n'existe pas.
+          </p>
+          <a href="/" style={{ marginTop: '16px', display: 'inline-block', color: 'var(--accent)' }}>
+            ← Retour à l'accueil
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  // ★ Chargement
   if (loading) {
     return (
       <div className="vitrine">
@@ -125,13 +197,17 @@ export default function Vitrine() {
     );
   }
 
+  const businessName = tenantProfile?.businessName || 'Boutique';
+  const ownerName = tenantProfile?.ownerName || '';
+  const contactEmail = tenantProfile?.email || '';
+
   return (
     <div className="vitrine">
       <header className="vitrine-header">
         <img src="/pwa-192x192.png" alt="Logo" className="vitrine-logo" />
         <div>
-          <h1 className="vitrine-title">✂️ L'Atelier du Loft</h1>
-          <p className="vitrine-subtitle-name">Josée Bourgouin</p>
+          <h1 className="vitrine-title">{businessName}</h1>
+          {ownerName && <p className="vitrine-subtitle-name">{ownerName}</p>}
           <p className="vitrine-subtitle">
             {filteredItems.length} article{filteredItems.length > 1 ? 's' : ''} disponible
             {filteredItems.length > 1 ? 's' : ''}
@@ -197,9 +273,7 @@ export default function Vitrine() {
                         </div>
                       )}
                       {itemPhotos.length > 1 && (
-                        <span className="vitrine-photo-count">
-                          📷 {itemPhotos.length}
-                        </span>
+                        <span className="vitrine-photo-count">📷 {itemPhotos.length}</span>
                       )}
                     </div>
                     <div className="vitrine-card-info">
@@ -222,7 +296,6 @@ export default function Vitrine() {
                     >
                       ✕ Fermer
                     </button>
-
                     {itemPhotos.length > 0 && (
                       <div className="vitrine-gallery">
                         <div className="vitrine-gallery-main">
@@ -238,7 +311,9 @@ export default function Vitrine() {
                             {itemPhotos.map((photo, idx) => (
                               <div
                                 key={idx}
-                                className={`vitrine-gallery-thumb ${currentPhotoIdx === idx ? 'active' : ''}`}
+                                className={`vitrine-gallery-thumb ${
+                                  currentPhotoIdx === idx ? 'active' : ''
+                                }`}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setActivePhoto((prev) => ({
@@ -254,14 +329,11 @@ export default function Vitrine() {
                         )}
                       </div>
                     )}
-
                     <div className="vitrine-detail-info">
                       <h3 className="vitrine-detail-title">
                         {item.description || 'Sans titre'}
                       </h3>
-                      <p className="vitrine-detail-price">
-                        {formatPrice(item.price)} $
-                      </p>
+                      <p className="vitrine-detail-price">{formatPrice(item.price)} $</p>
                       <p className="vitrine-detail-id">#{item.uniqueId}</p>
                       {item.category && (
                         <span className="vitrine-card-category">{item.category}</span>
@@ -289,11 +361,18 @@ export default function Vitrine() {
       )}
 
       <footer className="vitrine-footer">
-        <p>✂️ L'Atelier du Loft — Josée Bourgouin</p>
+        <p>{businessName}{ownerName ? ` — ${ownerName}` : ''}</p>
         <p className="vitrine-footer-cta">
           Écrivez-moi si quelque chose vous intéresse!
         </p>
-        <a href="mailto:Josée.Bourgouin@gmail.com">📧 Josée.Bourgouin@gmail.com</a>
+        {contactEmail && (
+          <a href={`mailto:${contactEmail}`}>📧 {contactEmail}</a>
+        )}
+        <p className="vitrine-footer-powered">
+          <a href="/" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '0.8rem' }}>
+            Propulsé par Vitrine Artisan
+          </a>
+        </p>
       </footer>
     </div>
   );

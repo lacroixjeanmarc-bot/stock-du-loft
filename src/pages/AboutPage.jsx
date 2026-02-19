@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ref, onValue, update } from 'firebase/database';
 import { database } from '../firebase';
+import { useAuth } from '../hooks/useAuth';
 import { subscribeToStores, addStore, updateStore, deleteStore, subscribeToItems } from '../services/inventoryService';
 import { THEMES, applyTheme } from '../services/themeService';
 
@@ -16,6 +17,7 @@ const PLANS = {
 };
 
 export default function AboutPage() {
+  const { tenant } = useAuth();
   const [soldDays, setSoldDays] = useState(7);
   const [stores, setStores] = useState([]);
   const [items, setItems] = useState([]);
@@ -27,7 +29,6 @@ export default function AboutPage() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
-
   // Tax settings
   const [taxEnabled, setTaxEnabled] = useState(false);
   const [tpsRate, setTpsRate] = useState('5');
@@ -35,32 +36,65 @@ export default function AboutPage() {
   const [tpsNumber, setTpsNumber] = useState('');
   const [tvqNumber, setTvqNumber] = useState('');
   const [showTaxInfo, setShowTaxInfo] = useState(false);
-
   // Upgrade modal
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
-
   // ★ Theme
   const [currentTheme, setCurrentTheme] = useState('dark-copper');
+  // ★ Vitrine link copy feedback
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  // ★ Vitrine URL
+  const vitrineSlug = tenant?.slug;
+  const vitrineUrl = vitrineSlug ? `${window.location.origin}/vitrine/${vitrineSlug}` : null;
+  const vitrineUrlShort = vitrineSlug ? `vitrineartisan.ca/vitrine/${vitrineSlug}` : null;
+
+  const handleCopyLink = async () => {
+    if (!vitrineUrl) return;
+    try {
+      await navigator.clipboard.writeText(vitrineUrl);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2500);
+    } catch (err) {
+      // Fallback for older browsers
+      const input = document.createElement('input');
+      input.value = vitrineUrl;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      document.body.removeChild(input);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2500);
+    }
+  };
+
+  const handleShareFacebook = () => {
+    if (!vitrineUrl) return;
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(vitrineUrl)}`, '_blank', 'width=600,height=400');
+  };
+
+  const handleShareNative = async () => {
+    if (!vitrineUrl || !navigator.share) return;
+    try {
+      await navigator.share({
+        title: tenant?.businessName || 'Ma vitrine',
+        text: `Découvrez mes créations artisanales!`,
+        url: vitrineUrl
+      });
+    } catch (err) {
+      // User cancelled or not supported
+    }
+  };
 
   useEffect(() => {
     const settingsRef = ref(database, SETTINGS_PATH);
     const unsub = onValue(settingsRef, (snap) => {
       if (snap.exists()) {
         const data = snap.val();
-        if (data.vitrineSoldDays !== undefined) {
-          setSoldDays(data.vitrineSoldDays);
-        }
-        if (data.subscription) {
-          setSubscription(data.subscription);
-        } else {
-          setSubscription({ plan: 'free', planType: null, startDate: null, expiryDate: null });
-        }
-        // ★ Theme
-        if (data.theme) {
-          setCurrentTheme(data.theme);
-        }
-        // Load tax settings
+        if (data.vitrineSoldDays !== undefined) { setSoldDays(data.vitrineSoldDays); }
+        if (data.subscription) { setSubscription(data.subscription); }
+        else { setSubscription({ plan: 'free', planType: null, startDate: null, expiryDate: null }); }
+        if (data.theme) { setCurrentTheme(data.theme); }
         if (data.taxes) {
           setTaxEnabled(data.taxes.enabled || false);
           if (data.taxes.tpsRate !== undefined) setTpsRate(data.taxes.tpsRate.toString());
@@ -73,15 +107,8 @@ export default function AboutPage() {
     return unsub;
   }, []);
 
-  useEffect(() => {
-    const unsub = subscribeToStores(setStores);
-    return unsub;
-  }, []);
-
-  useEffect(() => {
-    const unsub = subscribeToItems(setItems);
-    return unsub;
-  }, []);
+  useEffect(() => { const unsub = subscribeToStores(setStores); return unsub; }, []);
+  useEffect(() => { const unsub = subscribeToItems(setItems); return unsub; }, []);
 
   const handleChangeDays = async (value) => {
     const days = parseInt(value);
@@ -89,7 +116,6 @@ export default function AboutPage() {
     await update(ref(database, SETTINGS_PATH), { vitrineSoldDays: days });
   };
 
-  // ★ Theme handler
   const handleChangeTheme = async (themeId) => {
     setCurrentTheme(themeId);
     applyTheme(themeId);
@@ -99,26 +125,13 @@ export default function AboutPage() {
   // ---- Tax Handlers ----
   const handleTaxToggle = async (enabled) => {
     setTaxEnabled(enabled);
-    await update(ref(database, `${SETTINGS_PATH}/taxes`), {
-      enabled,
-      tpsRate: parseFloat(tpsRate) || 5,
-      tvqRate: parseFloat(tvqRate) || 9.975,
-      tpsNumber,
-      tvqNumber
-    });
+    await update(ref(database, `${SETTINGS_PATH}/taxes`), { enabled, tpsRate: parseFloat(tpsRate) || 5, tvqRate: parseFloat(tvqRate) || 9.975, tpsNumber, tvqNumber });
   };
 
   const handleSaveTaxSettings = async () => {
-    await update(ref(database, `${SETTINGS_PATH}/taxes`), {
-      enabled: taxEnabled,
-      tpsRate: parseFloat(tpsRate) || 5,
-      tvqRate: parseFloat(tvqRate) || 9.975,
-      tpsNumber: tpsNumber.trim(),
-      tvqNumber: tvqNumber.trim()
-    });
+    await update(ref(database, `${SETTINGS_PATH}/taxes`), { enabled: taxEnabled, tpsRate: parseFloat(tpsRate) || 5, tvqRate: parseFloat(tvqRate) || 9.975, tpsNumber: tpsNumber.trim(), tvqNumber: tvqNumber.trim() });
   };
 
-  // Aperçu calcul taxes
   const taxPreviewPrice = 50;
   const tpsAmount = Math.round(taxPreviewPrice * (parseFloat(tpsRate) || 0)) / 100;
   const tvqAmount = Math.round(taxPreviewPrice * (parseFloat(tvqRate) || 0) * 100) / 10000;
@@ -127,9 +140,7 @@ export default function AboutPage() {
   // ---- Subscription Info ----
   const currentPlanData = PLANS[subscription?.plan || 'free'];
   const totalArticles = items.filter((i) => i.status !== 'sold').length;
-  const articlesPercent = currentPlanData.articlesLimit === Infinity
-    ? 0
-    : Math.min(100, Math.round((totalArticles / currentPlanData.articlesLimit) * 100));
+  const articlesPercent = currentPlanData.articlesLimit === Infinity ? 0 : Math.min(100, Math.round((totalArticles / currentPlanData.articlesLimit) * 100));
   const isFreePlan = (subscription?.plan || 'free') === 'free';
 
   const formatDate = (dateStr) => {
@@ -156,27 +167,17 @@ export default function AboutPage() {
 
   const handleEditStore = (store) => {
     setEditingStore(store.id);
-    setStoreForm({
-      name: store.name,
-      commissionPercent: store.commissionPercent?.toString() || '',
-      locationFee: store.locationFee?.toString() || ''
-    });
+    setStoreForm({ name: store.name, commissionPercent: store.commissionPercent?.toString() || '', locationFee: store.locationFee?.toString() || '' });
   };
 
   const handleSaveStore = async (storeId) => {
-    await updateStore(storeId, {
-      name: storeForm.name.trim(),
-      commissionPercent: parseFloat(storeForm.commissionPercent) || 0,
-      locationFee: parseFloat(storeForm.locationFee) || 0
-    });
+    await updateStore(storeId, { name: storeForm.name.trim(), commissionPercent: parseFloat(storeForm.commissionPercent) || 0, locationFee: parseFloat(storeForm.locationFee) || 0 });
     setEditingStore(null);
     setStoreForm({ name: '', commissionPercent: '', locationFee: '' });
   };
 
   const handleDeleteStore = async (store) => {
-    const consignedItems = items.filter(
-      (i) => i.status === 'consignment' && i.consignmentStoreId === store.id
-    );
+    const consignedItems = items.filter((i) => i.status === 'consignment' && i.consignmentStoreId === store.id);
     if (consignedItems.length > 0) {
       alert(`Impossible de supprimer : ${consignedItems.length} article(s) en consigne chez ${store.name}`);
       return;
@@ -190,31 +191,18 @@ export default function AboutPage() {
   const getSalesReport = () => {
     const [year, month] = reportMonth.split('-').map(Number);
     const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
-    const nextMonth = month === 12
-      ? `${year + 1}-01-01`
-      : `${year}-${String(month + 1).padStart(2, '0')}-01`;
+    const nextMonth = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, '0')}-01`;
 
-    const soldItems = items.filter(
-      (item) => item.status === 'sold' && item.saleDate && item.saleDate >= monthStart && item.saleDate < nextMonth
-    );
+    const soldItems = items.filter((item) => item.status === 'sold' && item.saleDate && item.saleDate >= monthStart && item.saleDate < nextMonth);
     const sales = soldItems.filter((i) => !i.isGift);
     const gifts = soldItems.filter((i) => i.isGift);
     const totalRevenue = sales.reduce((sum, i) => sum + (i.salePrice || 0), 0);
     const totalCommissions = sales.reduce((sum, i) => sum + (i.commissionAmount || 0), 0);
-    const totalTaxes = sales.reduce((sum, i) => {
-      if (i.taxEnabled) {
-        return sum + (i.tpsAmount || 0) + (i.tvqAmount || 0);
-      }
-      return sum;
-    }, 0);
+    const totalTaxes = sales.reduce((sum, i) => { if (i.taxEnabled) { return sum + (i.tpsAmount || 0) + (i.tvqAmount || 0); } return sum; }, 0);
 
     const byMarket = {};
     sales.forEach((item) => {
-      const market = item.consignmentStoreId
-        ? `🏪 ${item.consignmentStore || 'Consigne'}`
-        : item.marketName
-          ? `🎪 ${item.marketName}`
-          : '🛍️ Vente directe';
+      const market = item.consignmentStoreId ? `🏪 ${item.consignmentStore || 'Consigne'}` : item.marketName ? `🎪 ${item.marketName}` : '🛍️ Vente directe';
       if (!byMarket[market]) { byMarket[market] = { count: 0, revenue: 0 }; }
       byMarket[market].count++;
       byMarket[market].revenue += item.salePrice || 0;
@@ -237,12 +225,8 @@ export default function AboutPage() {
     });
 
     return {
-      totalSales: sales.length,
-      totalGifts: gifts.length,
-      totalRevenue,
-      totalCommissions,
-      totalNet: totalRevenue - totalCommissions,
-      totalTaxes,
+      totalSales: sales.length, totalGifts: gifts.length, totalRevenue, totalCommissions,
+      totalNet: totalRevenue - totalCommissions, totalTaxes,
       avgPrice: sales.length > 0 ? totalRevenue / sales.length : 0,
       byMarket: Object.entries(byMarket).sort((a, b) => b[1].revenue - a[1].revenue),
       byCategory: Object.entries(byCategory).sort((a, b) => b[1].count - a[1].count),
@@ -257,36 +241,18 @@ export default function AboutPage() {
   const getMonthReport = () => {
     const [year, month] = reportMonth.split('-').map(Number);
     const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
-    const nextMonth = month === 12
-      ? `${year + 1}-01-01`
-      : `${year}-${String(month + 1).padStart(2, '0')}-01`;
+    const nextMonth = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, '0')}-01`;
 
     const report = {};
     stores.forEach((store) => {
-      report[store.id] = {
-        storeName: store.name,
-        commissionPercent: store.commissionPercent,
-        locationFee: store.locationFee,
-        totalSales: 0,
-        totalCommission: 0,
-        totalNet: 0,
-        itemsSold: 0,
-        itemsInConsignment: 0
-      };
+      report[store.id] = { storeName: store.name, commissionPercent: store.commissionPercent, locationFee: store.locationFee, totalSales: 0, totalCommission: 0, totalNet: 0, itemsSold: 0, itemsInConsignment: 0 };
     });
 
     items.forEach((item) => {
       if (item.status === 'consignment' && item.consignmentStoreId && report[item.consignmentStoreId]) {
         report[item.consignmentStoreId].itemsInConsignment++;
       }
-      if (
-        item.status === 'sold' &&
-        item.saleDate &&
-        item.saleDate >= monthStart &&
-        item.saleDate < nextMonth &&
-        item.consignmentStoreId &&
-        report[item.consignmentStoreId]
-      ) {
+      if (item.status === 'sold' && item.saleDate && item.saleDate >= monthStart && item.saleDate < nextMonth && item.consignmentStoreId && report[item.consignmentStoreId]) {
         const r = report[item.consignmentStoreId];
         r.itemsSold++;
         r.totalSales += item.salePrice || 0;
@@ -309,7 +275,52 @@ export default function AboutPage() {
 
   return (
     <div className="page about-page">
-      <h2 className="page-title">ℹ️ À propos</h2>
+      <h2 className="page-title">⚙️ Paramètres</h2>
+
+      {/* ======= MA VITRINE — LIEN PARTAGEABLE ======= */}
+      {vitrineSlug && (
+        <div className="about-card vitrine-link-card" style={{ marginBottom: '12px' }}>
+          <h4>🖼️ Ma vitrine publique</h4>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '6px 0 12px' }}>
+            Partagez ce lien sur Facebook, Instagram, ou votre site web pour que vos clients voient vos créations.
+          </p>
+
+          <div className="vitrine-link-box">
+            <span className="vitrine-link-url">{vitrineUrlShort}</span>
+            <button
+              className={`btn vitrine-link-copy ${linkCopied ? 'copied' : ''}`}
+              onClick={handleCopyLink}
+            >
+              {linkCopied ? '✓ Copié!' : '📋 Copier'}
+            </button>
+          </div>
+
+          <div className="vitrine-link-actions">
+            <a
+              href={vitrineUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-small vitrine-link-preview"
+            >
+              👁️ Voir ma vitrine
+            </a>
+            <button
+              className="btn btn-small vitrine-link-share"
+              onClick={handleShareFacebook}
+            >
+              📘 Partager sur Facebook
+            </button>
+            {navigator.share && (
+              <button
+                className="btn btn-small vitrine-link-share"
+                onClick={handleShareNative}
+              >
+                📤 Partager...
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ======= ABONNEMENT ======= */}
       <div className="about-card" style={{ marginBottom: '12px' }}>
@@ -327,7 +338,6 @@ export default function AboutPage() {
               )}
             </div>
           </div>
-
           <div className="subscription-articles">
             <div className="subscription-articles-label">
               <span>📦 Articles actifs</span>
@@ -338,27 +348,13 @@ export default function AboutPage() {
             </div>
             {isFreePlan && (
               <div className="subscription-progress-bar">
-                <div
-                  className={`subscription-progress-fill ${articlesPercent >= 80 ? 'warning' : ''} ${articlesPercent >= 100 ? 'full' : ''}`}
-                  style={{ width: `${articlesPercent}%` }}
-                />
+                <div className={`subscription-progress-fill ${articlesPercent >= 80 ? 'warning' : ''} ${articlesPercent >= 100 ? 'full' : ''}`} style={{ width: `${articlesPercent}%` }} />
               </div>
             )}
           </div>
-
-          <div className="subscription-detail-row">
-            <span>🖼️ Vitrine publique</span>
-            <span>{isFreePlan ? `${currentPlanData.vitrineLimit} articles max` : 'Illimitée'}</span>
-          </div>
-          <div className="subscription-detail-row">
-            <span>📍 Suivi consignes</span>
-            <span>{isFreePlan ? '—' : '✓'}</span>
-          </div>
-          <div className="subscription-detail-row">
-            <span>🏷️ Étiquettes QR</span>
-            <span>{isFreePlan ? '—' : '✓'}</span>
-          </div>
-
+          <div className="subscription-detail-row"><span>🖼️ Vitrine publique</span><span>{isFreePlan ? `${currentPlanData.vitrineLimit} articles max` : 'Illimitée'}</span></div>
+          <div className="subscription-detail-row"><span>📍 Suivi consignes</span><span>{isFreePlan ? '—' : '✓'}</span></div>
+          <div className="subscription-detail-row"><span>🏷️ Étiquettes QR</span><span>{isFreePlan ? '—' : '✓'}</span></div>
           {!isFreePlan && subscription?.expiryDate && (
             <div className="subscription-renewal">
               <span>📅 Renouvellement</span>
@@ -370,7 +366,6 @@ export default function AboutPage() {
               </span>
             </div>
           )}
-
           {isFreePlan ? (
             <div className="subscription-upgrade">
               <p className="subscription-upgrade-pitch">
@@ -410,10 +405,7 @@ export default function AboutPage() {
               onClick={() => handleChangeTheme(id)}
               title={theme.name}
             >
-              <div
-                className="theme-swatch-color"
-                style={{ background: theme.preview }}
-              />
+              <div className="theme-swatch-color" style={{ background: theme.preview }} />
               <span className="theme-swatch-label">
                 {theme.emoji} {theme.name}
               </span>
@@ -430,14 +422,8 @@ export default function AboutPage() {
         <h4>💰 Rapport des ventes</h4>
         <div className="form-group" style={{ marginTop: '10px' }}>
           <label className="form-label">Mois</label>
-          <input
-            type="month"
-            value={reportMonth}
-            onChange={(e) => setReportMonth(e.target.value)}
-            className="form-input"
-          />
+          <input type="month" value={reportMonth} onChange={(e) => setReportMonth(e.target.value)} className="form-input" />
         </div>
-
         {!hasSalesData ? (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '10px' }}>
             Aucune vente pour {getMonthLabel()}
@@ -464,7 +450,6 @@ export default function AboutPage() {
                 </div>
               )}
             </div>
-
             {(salesReport.totalCommissions > 0 || salesReport.totalTaxes > 0) && (
               <div className="sales-deductions">
                 {salesReport.totalCommissions > 0 && (
@@ -485,44 +470,35 @@ export default function AboutPage() {
                 </div>
               </div>
             )}
-
             {salesReport.byMarket.length > 0 && (
               <div className="sales-breakdown">
                 <p className="sales-breakdown-title">Par lieu de vente</p>
                 {salesReport.byMarket.map(([market, data]) => (
                   <div key={market} className="sales-breakdown-row">
                     <span className="sales-breakdown-name">{market}</span>
-                    <span className="sales-breakdown-stats">
-                      {data.count} article{data.count > 1 ? 's' : ''} · {formatPrice(data.revenue)} $
-                    </span>
+                    <span className="sales-breakdown-stats">{data.count} article{data.count > 1 ? 's' : ''} · {formatPrice(data.revenue)} $</span>
                   </div>
                 ))}
               </div>
             )}
-
             {salesReport.byCategory.length > 0 && (
               <div className="sales-breakdown">
                 <p className="sales-breakdown-title">Par catégorie</p>
                 {salesReport.byCategory.map(([cat, data]) => (
                   <div key={cat} className="sales-breakdown-row">
                     <span className="sales-breakdown-name">{cat}</span>
-                    <span className="sales-breakdown-stats">
-                      {data.count} · {formatPrice(data.revenue)} $
-                    </span>
+                    <span className="sales-breakdown-stats">{data.count} · {formatPrice(data.revenue)} $</span>
                   </div>
                 ))}
               </div>
             )}
-
             {salesReport.bySeller.length > 1 && (
               <div className="sales-breakdown">
                 <p className="sales-breakdown-title">Par vendeur</p>
                 {salesReport.bySeller.map(([seller, data]) => (
                   <div key={seller} className="sales-breakdown-row">
                     <span className="sales-breakdown-name">👤 {seller}</span>
-                    <span className="sales-breakdown-stats">
-                      {data.count} · {formatPrice(data.revenue)} $
-                    </span>
+                    <span className="sales-breakdown-stats">{data.count} · {formatPrice(data.revenue)} $</span>
                   </div>
                 ))}
               </div>
@@ -537,15 +513,10 @@ export default function AboutPage() {
         <div className="tax-section">
           <div className="tax-toggle-row">
             <label className="tax-toggle-label">
-              <input
-                type="checkbox"
-                checked={taxEnabled}
-                onChange={(e) => handleTaxToggle(e.target.checked)}
-              />
+              <input type="checkbox" checked={taxEnabled} onChange={(e) => handleTaxToggle(e.target.checked)} />
               <span className="tax-toggle-text">Je perçois les taxes de vente</span>
             </label>
           </div>
-
           {taxEnabled && (
             <>
               <div className="store-form-row" style={{ marginTop: '12px' }}>
@@ -558,7 +529,6 @@ export default function AboutPage() {
                   <input type="number" value={tvqRate} onChange={(e) => setTvqRate(e.target.value)} onBlur={handleSaveTaxSettings} className="form-input" step="0.001" min="0" max="20" inputMode="decimal" />
                 </div>
               </div>
-
               <div className="form-group" style={{ marginTop: '8px' }}>
                 <label className="form-label">Numéro TPS (optionnel)</label>
                 <input type="text" value={tpsNumber} onChange={(e) => setTpsNumber(e.target.value)} onBlur={handleSaveTaxSettings} className="form-input" placeholder="Ex: 123456789RT0001" />
@@ -567,7 +537,6 @@ export default function AboutPage() {
                 <label className="form-label">Numéro TVQ (optionnel)</label>
                 <input type="text" value={tvqNumber} onChange={(e) => setTvqNumber(e.target.value)} onBlur={handleSaveTaxSettings} className="form-input" placeholder="Ex: 1234567890TQ0001" />
               </div>
-
               <div className="tax-preview">
                 <p className="tax-preview-title">Aperçu sur un article à 50.00 $ :</p>
                 <div className="tax-preview-row"><span>Prix</span><span>50.00 $</span></div>
@@ -577,11 +546,9 @@ export default function AboutPage() {
               </div>
             </>
           )}
-
           <button className="btn btn-small btn-secondary btn-full" style={{ marginTop: '12px' }} onClick={() => setShowTaxInfo(!showTaxInfo)}>
             {showTaxInfo ? '▲ Masquer' : '📋 Ce que vous devez savoir sur les taxes'}
           </button>
-
           {showTaxInfo && (
             <div className="tax-info-section">
               <h5>📋 Taxes de vente — Ce que vous devez savoir</h5>
@@ -678,7 +645,6 @@ export default function AboutPage() {
             ))}
           </div>
         )}
-
         {showAddStore ? (
           <div className="store-add-form">
             <div className="form-group">
@@ -714,7 +680,6 @@ export default function AboutPage() {
           <label className="form-label">Mois</label>
           <input type="month" value={reportMonth} onChange={(e) => setReportMonth(e.target.value)} className="form-input" />
         </div>
-
         {!hasReportData ? (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '10px' }}>
             Aucune activité de consigne pour ce mois
@@ -727,31 +692,19 @@ export default function AboutPage() {
                 <div key={idx} className="report-store-card">
                   <div className="report-store-name">{r.storeName}</div>
                   {r.itemsInConsignment > 0 && (
-                    <div className="report-row">
-                      <span>📦 En consigne actuellement</span>
-                      <span>{r.itemsInConsignment} article(s)</span>
-                    </div>
+                    <div className="report-row"><span>📦 En consigne actuellement</span><span>{r.itemsInConsignment} article(s)</span></div>
                   )}
                   {r.itemsSold > 0 && (
                     <>
                       <div className="report-row"><span>🏷️ Articles vendus</span><span>{r.itemsSold}</span></div>
                       <div className="report-row"><span>💰 Total ventes</span><span>{formatPrice(r.totalSales)} $</span></div>
                       {r.commissionPercent > 0 && (
-                        <div className="report-row report-row-negative">
-                          <span>📉 Commission ({r.commissionPercent}%)</span>
-                          <span>-{formatPrice(r.totalCommission)} $</span>
-                        </div>
+                        <div className="report-row report-row-negative"><span>📉 Commission ({r.commissionPercent}%)</span><span>-{formatPrice(r.totalCommission)} $</span></div>
                       )}
                       {r.locationFee > 0 && (
-                        <div className="report-row report-row-negative">
-                          <span>🏠 Loyer mensuel</span>
-                          <span>-{formatPrice(r.locationFee)} $</span>
-                        </div>
+                        <div className="report-row report-row-negative"><span>🏠 Loyer mensuel</span><span>-{formatPrice(r.locationFee)} $</span></div>
                       )}
-                      <div className="report-row report-row-total">
-                        <span>✅ Revenu net</span>
-                        <span>{formatPrice(r.totalNet - (r.locationFee || 0))} $</span>
-                      </div>
+                      <div className="report-row report-row-total"><span>✅ Revenu net</span><span>{formatPrice(r.totalNet - (r.locationFee || 0))} $</span></div>
                     </>
                   )}
                 </div>
@@ -783,10 +736,11 @@ export default function AboutPage() {
         <div className="about-logo">
           <img src="/pwa-192x192.png" alt="Vitrine Artisan" />
         </div>
-        <h3>✂️ Vitrine Artisan</h3>
-        <p className="about-version">Version 1.3</p>
+        <h3>🎨 Vitrine Artisan</h3>
+        <p className="about-version">Version 2.0</p>
         <p className="about-description">
-          Application de gestion d'inventaire conçue pour les artisans et créateurs. Gérez vos articles, suivez vos consignes et enregistrez vos ventes en toute simplicité.
+          Application de gestion d'inventaire conçue pour les artisans et créateurs.
+          Gérez vos articles, suivez vos consignes et enregistrez vos ventes en toute simplicité.
         </p>
         <div className="about-author">
           <p>Créé par <strong>Jean-Marc Lacroix</strong></p>
