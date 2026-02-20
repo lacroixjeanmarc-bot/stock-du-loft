@@ -1,4 +1,4 @@
-/* ==========================================
+﻿/* ==========================================
    VITRINE ARTISAN — Styles v2.0
    Professional top-nav, multi-tenant themes
    ========================================== */
@@ -3064,6 +3064,43 @@ body {
   text-align: center;
 }
 
+/* ======= UPGRADE MODAL — EMAIL COPY + MAILTO ======= */
+.upgrade-modal-email-box {
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.upgrade-modal-email-box:hover {
+  background: #e8e0ff;
+}
+
+.upgrade-modal-email-box:active {
+  transform: scale(0.98);
+}
+
+.upgrade-modal-email-copy {
+  margin-left: auto;
+  font-size: 1.1rem;
+}
+
+.upgrade-modal-mailto-link {
+  display: block;
+  text-align: center;
+  color: #667eea;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+  padding: 8px;
+  margin: -8px 0 16px 0;
+  border-radius: 8px;
+}
+
+.upgrade-modal-mailto-link:hover {
+  background: #f0edff;
+}
+
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -3265,6 +3302,95 @@ body {
   white-space: nowrap;
   margin-left: 8px;
 }
+
+/* ======= ADMIN PAGE — LIGHT OVERRIDE ======= */
+.admin-page {
+  --card-bg: #ffffff;
+  --text-primary: #1a1a2e;
+  --text-secondary: #444;
+  --text-muted: #666;
+}
+
+.admin-stat-card {
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+}
+
+.admin-stat-label {
+  color: #666;
+}
+
+.admin-tenant-card {
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+}
+
+.admin-tenant-card:hover {
+  border-color: #999;
+}
+
+.admin-tenant-card.expanded {
+  border-color: #667eea;
+}
+
+.admin-tenant-business {
+  color: #1a1a2e;
+}
+
+.admin-tenant-owner {
+  color: #666;
+}
+
+.admin-detail-label {
+  color: #888;
+}
+
+.admin-detail-value {
+  color: #333;
+}
+
+.admin-notes-display {
+  background: #f8f9fa;
+  border-color: #ddd;
+}
+
+.admin-notes-display p {
+  color: #666;
+}
+
+.admin-add-form {
+  background: #f8f9fa;
+  border-color: #e0e0e0;
+}
+
+.admin-section-header h3 {
+  color: #1a1a2e;
+}
+
+.admin-tenant-details {
+  border-top-color: #e0e0e0;
+}
+
+.admin-tenant-actions {
+  border-top-color: #e0e0e0;
+}
+
+.admin-page .form-input {
+  background: #ffffff;
+  color: #1a1a2e;
+  border-color: #ccc;
+}
+
+.admin-page .form-label {
+  color: #444;
+}
+
+.admin-page .form-textarea {
+  background: #ffffff;
+  color: #1a1a2e;
+  border-color: #ccc;
+}
+
 
 /* ======= ADMIN PAYMENTS HISTORY ======= */
 .admin-payments-history {

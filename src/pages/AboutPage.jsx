@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { ref, onValue, update } from 'firebase/database';
 import { database } from '../firebase';
 import { useAuth } from '../hooks/useAuth';
@@ -39,6 +39,24 @@ export default function AboutPage() {
   // Upgrade modal
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
+  const [emailCopied, setEmailCopied] = useState(false);
+
+  const handleCopyEmail = async () => {
+    try {
+      await navigator.clipboard.writeText('lacroix.jeanmarc@gmail.com');
+      setEmailCopied(true);
+      setTimeout(() => setEmailCopied(false), 2500);
+    } catch (err) {
+      const input = document.createElement('input');
+      input.value = 'lacroix.jeanmarc@gmail.com';
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      document.body.removeChild(input);
+      setEmailCopied(true);
+      setTimeout(() => setEmailCopied(false), 2500);
+    }
+  };
   // ★ Theme
   const [currentTheme, setCurrentTheme] = useState('dark-copper');
   // ★ Vitrine link copy feedback
@@ -766,7 +784,7 @@ export default function AboutPage() {
                 <span className="upgrade-modal-step-number">1</span>
                 <span>Envoyez un virement Interac de <strong>{selectedPlan === 'monthly' ? '12,99 $' : '100,00 $'}</strong> à :</span>
               </div>
-              <div className="upgrade-modal-email-box">
+              <div className="upgrade-modal-email-box" onClick={handleCopyEmail} style={{ cursor: 'pointer' }}>
                 <span className="upgrade-modal-email-icon">📧</span>
                 <span className="upgrade-modal-email-address">lacroix.jeanmarc@gmail.com</span>
               </div>

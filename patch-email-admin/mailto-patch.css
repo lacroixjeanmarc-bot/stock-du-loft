@@ -1,0 +1,36 @@
+/* ======= UPGRADE MODAL — EMAIL COPY + MAILTO ======= */
+.upgrade-modal-email-box {
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.upgrade-modal-email-box:hover {
+  background: #e8e0ff;
+}
+
+.upgrade-modal-email-box:active {
+  transform: scale(0.98);
+}
+
+.upgrade-modal-email-copy {
+  margin-left: auto;
+  font-size: 1.1rem;
+}
+
+.upgrade-modal-mailto-link {
+  display: block;
+  text-align: center;
+  color: #667eea;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+  padding: 8px;
+  margin: -8px 0 16px 0;
+  border-radius: 8px;
+}
+
+.upgrade-modal-mailto-link:hover {
+  background: #f0edff;
+}
+
